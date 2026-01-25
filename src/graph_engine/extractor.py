@@ -17,7 +17,7 @@ class GraphExtractor:
 
     def extract(self, text_chunk: str) -> dict:
         """
-        Extracts entities and relationships from the given text chunk using Llama-3.
+        Extracts entities and relationships from the given text chunk using Groq (openai/gpt-oss-120b).
         Returns a Python dictionary with 'nodes' and 'relationships'.
         """
         system_prompt = (
@@ -53,7 +53,7 @@ class GraphExtractor:
             response_content = completion.choices[0].message.content.strip()
             
             # Helper to parse JSON even if there's minor noise (though system prompt forbids it)
-            # Llama-3 usually respects the system prompt well.
+            # The model usually respects the system prompt well.
             try:
                 data = json.loads(response_content)
                 return data

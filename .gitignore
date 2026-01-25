@@ -44,6 +44,3 @@ data/artifacts/*
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
-
-# Extra files
-SwarajCS.pdf

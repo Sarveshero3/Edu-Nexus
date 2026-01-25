@@ -11,6 +11,7 @@
 - **Semantic Brain:** FAISS + SentenceTransformers (Vector Search)
 - **Fast Brain:** BM25 (Keyword Search)
 - **Deep Brain:** Neo4j + Groq openai/gpt-oss-120b (Graph Search)
+- **Cleaner:** Gemini 1.5 Flash (Data Cleaning)
 
 ## Team Roles
 - **Arch/Core:** Sarvesh (Orchestrator, Graph Logic, Main Repo)
@@ -22,9 +23,9 @@
 1. Clone the repo.
 2. `pip install -r requirements.txt`
 3. Copy `.env.example` to `.env` and fill in API keys.
-4. Test the Graph Engine:
+4. Run the application:
    ```bash
-   python src/graph_engine/builder.py
+   chainlit run main.py -w
    ```
 
 ## 📂 Project Structure
@@ -35,6 +36,7 @@ Edu-Nexus/
 ├── .env.example          # [PUBLIC] Template for API keys
 ├── .gitignore            # Files to exclude from Git
 ├── config.py             # Global paths and configuration constants
+├── main.py               # [ENTRY POINT] Chainlit UI & Application Loop
 ├── requirements.txt      # Python dependencies
 ├── README.md             # Project documentation
 │

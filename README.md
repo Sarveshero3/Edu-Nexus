@@ -4,13 +4,13 @@
 
 ## 🚧 Current Status
 **Focus:** The current implementation is focused on the **Graph Engine** (`src/graph_engine`).
-- **Implemented:** Graph extraction (Groq Llama-3) and Neo4j operations.
+- **Implemented:** Graph extraction (Groq openai/gpt-oss-120b) and Neo4j operations.
 - **Pending:** Ingestion pipeline, Vector Engine, and Orchestrator are currently placeholders.
 
 ## Architecture
 - **Semantic Brain:** FAISS + SentenceTransformers (Vector Search)
 - **Fast Brain:** BM25 (Keyword Search)
-- **Deep Brain:** Neo4j + Groq Llama-3 (Graph Search)
+- **Deep Brain:** Neo4j + Groq openai/gpt-oss-120b (Graph Search)
 
 ## Team Roles
 - **Arch/Core:** Sarvesh (Orchestrator, Graph Logic, Main Repo)
@@ -59,7 +59,7 @@ Edu-Nexus/
     ├── graph_engine/     # [MODULE] Knowledge Graph (Sarvesh) - [ACTIVE]
     │   ├── __init__.py
     │   ├── builder.py    # Logic: Orchestration (Extract -> Push to Neo4j)
-    │   ├── extractor.py  # Logic: LLM Entity Extraction (Groq)
+    │   ├── extractor.py  # Logic: LLM Entity Extraction (Groq openai/gpt-oss-120b)
     │   └── neo4j_ops.py  # Logic: Neo4j Cypher Queries
     │
     └── orchestrator/     # [MODULE] The Brain (Sarvesh) - [PENDING]

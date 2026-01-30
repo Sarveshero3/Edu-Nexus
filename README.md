@@ -22,10 +22,10 @@
 ## Setup
 1. Clone the repo.
 2. `pip install -r requirements.txt`
-3. Copy `.env.example` to `.env` and fill in API keys.
-4. Run the application:
+3. Copy `.env.example` to `.env` and fill in API keys (GROQ_API_KEY, NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD).
+4. Test the Graph Engine:
    ```bash
-   chainlit run main.py -w
+   python src/graph_engine/builder.py
    ```
 
 ## 📂 Project Structure
@@ -36,7 +36,6 @@ Edu-Nexus/
 ├── .env.example          # [PUBLIC] Template for API keys
 ├── .gitignore            # Files to exclude from Git
 ├── config.py             # Global paths and configuration constants
-├── main.py               # [ENTRY POINT] Chainlit UI & Application Loop
 ├── requirements.txt      # Python dependencies
 ├── README.md             # Project documentation
 │
@@ -54,6 +53,9 @@ Edu-Nexus/
     │   ├── __init__.py
     │   └── cleaner.py    # Logic: PDF -> Clean Text
     │
+    ├── splitter/         # [MODULE] Text Splitting (Saatvik)
+    │   └── textSplitter.py # Logic: Chunking text
+    │
     ├── vector_engine/    # [MODULE] Vector Database (Saatvik) - [PENDING]
     │   ├── __init__.py
     │   └── store.py      # Logic: Chunking & FAISS Operations
@@ -68,4 +70,3 @@ Edu-Nexus/
         ├── __init__.py
         └── manager.py    # Logic: Routing (Graph vs Vector vs Keyword)
 ```
-This is an update

@@ -3,9 +3,9 @@
 **Edu Nexus** is a Zero-Cost University Semantic Search Engine using a Tri-Hybrid retrieval strategy (Vector + Keyword + Graph).
 
 ## 🚧 Current Status
-**Focus:** The current implementation is focused on the **Graph Engine** (`src/graph_engine`).
-- **Implemented:** Graph extraction (Groq openai/gpt-oss-120b), Neo4j operations, and Text Splitting.
-- **Pending:** Ingestion pipeline, Vector Engine, and Orchestrator are currently placeholders.
+**Focus:** The current implementation is focused on the **Graph Engine** (`src/graph_engine`) and **Ingestion Pipeline** (`src/ingest`).
+- **Implemented:** Ingestion pipeline (PDF/DOCX cleaning), Graph extraction (Groq openai/gpt-oss-120b), Neo4j operations, and Text Splitting.
+- **Pending:** Vector Engine and Orchestrator are currently placeholders.
 
 ## Architecture
 - **Semantic Brain:** FAISS + SentenceTransformers (Vector Search)
@@ -45,8 +45,9 @@ Edu-Nexus/
 │   └── artifacts/        # [OUTPUT] FAISS indices & metadata (Saatvik)
 │
 ├── src/                  # Source Code
-    ├── ingest/           # [MODULE] Data Engineering (Swaraj) - [PENDING]
-    │   └── cleaner.py    # Logic: PDF -> Clean Text
+    ├── ingest/           # [MODULE] Data Engineering (Swaraj) - [ACTIVE]
+    │   ├── processor.py  # Logic: Batch processing & DOCX extraction
+    │   └── cleaner.py    # Logic: PDF extraction & Text Cleaning
     │
     ├── splitter/         # [MODULE] Text Splitting (Saatvik)
     │   └── textSplitter.py # Logic: Chunking text

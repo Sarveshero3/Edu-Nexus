@@ -64,3 +64,33 @@ This document provides a deep dive into the implemented modules, their files, pr
 - **Why this Tech?**
   - **Modular Design:** Separating the "Coordinator" (Builder) from the "Worker" (Extractor) and "Storage" (Neo4jOps) makes the code testable and maintainable.
   - **MERGE Queries:** Using `MERGE` instead of `CREATE` ensures that if we process the same text twice, we don't end up with duplicate nodes.
+
+---
+
+## 3. Ingest Module (`src/ingest/`)
+
+### File: `cleaner.py`
+- **Author:** Swaraj
+- **Purpose:** Handles extraction of text from PDFs and performs extensive cleaning and normalization to prepare text for chunking.
+- **Tech Stack:**
+  - **Library:** `pdfplumber` (for PDF extraction)
+  - **Logic:** Regular Expressions (`re`)
+- **Processing Logic:**
+  - **Extraction:** Extracts text page-by-page from PDFs.
+  - **Heuristic Cleaning:**
+    - Detects and removes repeated lines (headers/footers) across pages.
+    - Removes page numbers and short all-caps headers.
+  - **Normalization:** Fixes hyphenated words broken across lines and merges broken lines (paragraphs).
+  - **Chunking:** Includes a fast sentence splitter and a sliding window chunker.
+- **Why this Tech?**
+  - **pdfplumber:** Provides high-fidelity text extraction.
+  - **Regex Heuristics:** Efficiently removes noise (headers/footers) without needing heavy ML models, keeping the zero-cost constraint.
+
+### File: `processor.py`
+- **Purpose:** The batch processing entry point for the ingestion pipeline.
+- **Tech Stack:**
+  - **Library:** `python-docx` (for DOCX extraction), `tqdm` (progress bars), `argparse`.
+- **Processing Logic:**
+  - **Discovery:** Scans directories for supported files (PDF, DOCX, TXT, MD).
+  - **Dispatch:** Routes files to the appropriate extractor (calls `cleaner.py` for PDFs, internal logic for DOCX).
+  - **Output:** Writes cleaned text (`.cleaned.txt`) and structured chunks (`.chunks.jsonl`) to the output directory.

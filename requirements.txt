@@ -23,3 +23,11 @@ chainlit>=1.1.0         # Chat Interface
 
 # --- PDF Processing (For Swaraj) ---
 pypdf>=4.2.0
+
+pdfplumber
+tqdm
+regex
+pillow
+pytesseract
+
+python-docx

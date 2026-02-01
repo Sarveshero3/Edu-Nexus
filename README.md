@@ -4,7 +4,7 @@
 
 ## 🚧 Current Status
 **Focus:** The current implementation is focused on the **Graph Engine** (`src/graph_engine`).
-- **Implemented:** Graph extraction (Groq openai/gpt-oss-120b) and Neo4j operations.
+- **Implemented:** Graph extraction (Groq openai/gpt-oss-120b), Neo4j operations, and Text Splitting.
 - **Pending:** Ingestion pipeline, Vector Engine, and Orchestrator are currently placeholders.
 
 ## Architecture
@@ -44,29 +44,21 @@ Edu-Nexus/
 │   ├── processed/        # [INTERMEDIATE] Cleaned .txt files (Swaraj)
 │   └── artifacts/        # [OUTPUT] FAISS indices & metadata (Saatvik)
 │
-├── notebooks/            # Jupyter notebooks for prototyping
-│
-└── src/                  # Source Code
-    ├── __init__.py
-    │
+├── src/                  # Source Code
     ├── ingest/           # [MODULE] Data Engineering (Swaraj) - [PENDING]
-    │   ├── __init__.py
     │   └── cleaner.py    # Logic: PDF -> Clean Text
     │
     ├── splitter/         # [MODULE] Text Splitting (Saatvik)
     │   └── textSplitter.py # Logic: Chunking text
     │
     ├── vector_engine/    # [MODULE] Vector Database (Saatvik) - [PENDING]
-    │   ├── __init__.py
     │   └── store.py      # Logic: Chunking & FAISS Operations
     │
     ├── graph_engine/     # [MODULE] Knowledge Graph (Sarvesh) - [ACTIVE]
-    │   ├── __init__.py
     │   ├── builder.py    # Logic: Orchestration (Extract -> Push to Neo4j)
     │   ├── extractor.py  # Logic: LLM Entity Extraction (Groq openai/gpt-oss-120b)
     │   └── neo4j_ops.py  # Logic: Neo4j Cypher Queries
     │
     └── orchestrator/     # [MODULE] The Brain (Sarvesh) - [PENDING]
-        ├── __init__.py
         └── manager.py    # Logic: Routing (Graph vs Vector vs Keyword)
 ```

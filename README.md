@@ -4,7 +4,7 @@
 
 ## 🚧 Current Status
 **Focus:** The current implementation is focused on the **Graph Engine** (`src/graph_engine`).
-- **Implemented:** Graph extraction (Groq openai/gpt-oss-120b) and Neo4j operations.
+- **Implemented:** Graph extraction (Groq openai/gpt-oss-120b), Neo4j operations, and Text Splitting.
 - **Pending:** Ingestion pipeline, Vector Engine, and Orchestrator are currently placeholders.
 
 ## Architecture
@@ -28,8 +28,28 @@
    python src/graph_engine/builder.py
    ```
 
-## 📂 Project Structure
+## 📂 Project Structure & Module Details
 
+### `src/splitter/`
+- **`textSplitter.py` (Saatvik)**:
+  - **Purpose:** Prepares text for processing by breaking it into smaller chunks.
+  - **Logic:** Uses `RecursiveCharacterTextSplitter` with a chunk size of 500 characters and 50-character overlap. This ensures context is preserved across boundaries.
+
+### `src/graph_engine/`
+- **`extractor.py`**:
+  - **Purpose:** AI-powered extraction of Knowledge Graph elements.
+  - **Logic:** Sends text chunks to Groq (`openai/gpt-oss-120b`) with a system prompt that enforces strict JSON output containing `nodes` (Entities) and `relationships`.
+- **`neo4j_ops.py`**:
+  - **Purpose:** Database abstraction layer for Neo4j.
+  - **Logic:** Manages the Neo4j driver connection and provides a `run_cypher` method to execute queries safely.
+- **`builder.py`**:
+  - **Purpose:** Main entry point for Graph construction.
+  - **Logic:** Orchestrates the pipeline:
+    1. **Input:** Receives raw text.
+    2. **Extraction:** Calls `extractor.py` to get JSON data.
+    3. **Storage:** Iterates through the JSON, dynamically constructing and executing Cypher `MERGE` queries via `neo4j_ops.py` to upsert nodes and relationships into the database.
+
+### File Tree
 ```text
 Edu-Nexus/
 ├── .env                  # [SECRET] API Keys (Groq, Neo4j, Gemini) - DO NOT COMMIT
@@ -44,29 +64,21 @@ Edu-Nexus/
 │   ├── processed/        # [INTERMEDIATE] Cleaned .txt files (Swaraj)
 │   └── artifacts/        # [OUTPUT] FAISS indices & metadata (Saatvik)
 │
-├── notebooks/            # Jupyter notebooks for prototyping
-│
-└── src/                  # Source Code
-    ├── __init__.py
-    │
+├── src/                  # Source Code
     ├── ingest/           # [MODULE] Data Engineering (Swaraj) - [PENDING]
-    │   ├── __init__.py
     │   └── cleaner.py    # Logic: PDF -> Clean Text
     │
     ├── splitter/         # [MODULE] Text Splitting (Saatvik)
     │   └── textSplitter.py # Logic: Chunking text
     │
     ├── vector_engine/    # [MODULE] Vector Database (Saatvik) - [PENDING]
-    │   ├── __init__.py
     │   └── store.py      # Logic: Chunking & FAISS Operations
     │
     ├── graph_engine/     # [MODULE] Knowledge Graph (Sarvesh) - [ACTIVE]
-    │   ├── __init__.py
     │   ├── builder.py    # Logic: Orchestration (Extract -> Push to Neo4j)
     │   ├── extractor.py  # Logic: LLM Entity Extraction (Groq openai/gpt-oss-120b)
     │   └── neo4j_ops.py  # Logic: Neo4j Cypher Queries
     │
     └── orchestrator/     # [MODULE] The Brain (Sarvesh) - [PENDING]
-        ├── __init__.py
         └── manager.py    # Logic: Routing (Graph vs Vector vs Keyword)
 ```

@@ -27,3 +27,5 @@ async def on_message(message: cl.Message):
         
     # Send the final answer
     await cl.Message(content=response["answer"]).send()
+
+"chainlit run app.py"

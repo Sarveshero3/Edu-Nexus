@@ -1,5 +1,9 @@
 import sys
 import os
+<<<<<<< HEAD
+import re
+=======
+>>>>>>> c6b0a8e7729f50b5a1b08b60c1cc4c2e24dae4de
 from pathlib import Path
 import json
 from datetime import datetime
@@ -82,6 +86,31 @@ class UniversalConverter:
             self.save_outputs(ppt.stem, text)
 
     # ---------------- SAVE OUTPUT ----------------
+<<<<<<< HEAD
+    
+
+
+
+    def save_outputs(self, name, text):
+        # 1. Define illegal XML characters (Control characters except \n, \r, \t)
+        # This regex matches characters that are NOT allowed in XML 1.0
+        illegal_xml_chars = re.compile(
+            r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x84\x86-\x9f]"
+        )
+        
+        # 2. Efficiently remove them
+        clean_text = illegal_xml_chars.sub("", text)
+
+        # 3. Save as TXT
+        txt_path = self.intermediate / "ocr_text" / f"{name}.txt"
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(clean_text)
+
+        # 4. Save as DOCX
+        doc = Document()
+        # If the text is massive, we add it in one go
+        doc.add_paragraph(clean_text)
+=======
     def save_outputs(self, name, text):
         # save intermediate
         with open(self.intermediate / "ocr_text" / f"{name}.txt", "w", encoding="utf-8") as f:
@@ -90,6 +119,7 @@ class UniversalConverter:
         # save docx
         doc = Document()
         doc.add_paragraph(text)
+>>>>>>> c6b0a8e7729f50b5a1b08b60c1cc4c2e24dae4de
         doc.save(self.normalized / "docx" / f"{name}.docx")
 
         self.update_metadata(name)

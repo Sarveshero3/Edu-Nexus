@@ -70,10 +70,12 @@ The `data/` folder manages the lifecycle of document ingestion and indexing stor
 - **Purpose**: Central intelligence coordinator that aggregates components of the RAG retrieval strategies.
 - **Tech Stack**: Python, `asyncio`, Groq API (`meta-llama/llama-4-scout-17b-16e-instruct`).
 - **Processing Logic**:
-  - Determines retrieval strategy natively based on the active state of engines (`both`, `bm25_only`, `graph_only`, `none`).
-  - Fetches context jointly across BM25 Engine and Neo4j Engine.
+  - Contains `MockManager` for simulation and `OrchestratorManager` for real deployments.
+  - Determines retrieval strategy natively based on the active state of engines (`both`, `bm25_only`, `graph_only`, `vector_only`, `none`).
+  - Fetches context jointly across the BM25 Engine, Neo4j Graph Engine, and FAISS Vector Store.
   - Validates and fuses the combined textual knowledge.
   - Instructs a powerful Groq Inference LLM over the contextual fragments avoiding hallucination bounds.
+  - Formats output for the UI "Glass Box" providing transparency into retrieval execution paths.
   - Dynamically runs indexing reconstruction flows whenever fresh files are consumed by the system.
 
 ### 2. Retrieval Module (`src/retrieval/`)
@@ -136,9 +138,23 @@ The `data/` folder manages the lifecycle of document ingestion and indexing stor
 #### File: `store.py` (Semantic Brain)
 
 - **Author:** Saatvik
-- **Purpose**: Future placeholder representing the Vector mapping component algorithms.
-- **Tech Stack**: FAISS + SentenceTransformers (pending integration).
-- **Processing Logic**: Designed conceptually to interpret and map complex semantic relationships by deploying vector stores.
+- **Purpose**: Represents the Vector mapping component algorithms using FAISS.
+- **Tech Stack**: FAISS + `sentence-transformers`.
+- **Processing Logic**: Interprets and maps complex semantic relationships by deploying vector stores using a lazy-loaded SentenceTransformer model (`all-MiniLM-L6-v2`) and a FAISS `IndexFlatIP`. Serializes FAISS indices and metadata to `data/artifacts/faiss.index` and `data/artifacts/faiss_meta.pkl`.
+
+#### File: `vector.py`
+
+- **Author:** Saatvik
+- **Purpose**: Secondary abstraction for interacting with FAISS.
+- **Tech Stack**: LangChain (`FAISS`, `HuggingFaceEmbeddings`).
+- **Processing Logic**: Simplifies FAISS operations via LangChain's vectorstore wrappers. Provides database loading, creation, and searching functional bounds.
+
+### 7. Pipeline Module (`src/pipeline/`)
+
+#### File: `run_pipeline.py`
+
+- **Purpose**: Orchestrating script for unifying conversions.
+- **Processing Logic**: Ties OCR tasks, DOCX generators, and the ingestion processes to test conversion flows smoothly.
 
 ---
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import logging
 from pathlib import Path
 from typing import List
@@ -156,22 +155,3 @@ def main(
 
     logger.info(f"Processing complete: {len(ok)} succeeded, {len(err)} failed")
 
-
-# -------------------- entrypoint --------------------
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser("PDF / DOCX cleaner for RAG")
-    parser.add_argument("--raw-dir", default="data/raw")
-    parser.add_argument("--out-dir", default="data/processed")
-    parser.add_argument("--ocr", action="store_true")
-    parser.add_argument("--max-tokens", type=int, default=500)
-    parser.add_argument("--overlap", type=int, default=100)
-    args = parser.parse_args()
-
-    main(
-        args.raw_dir,
-        args.out_dir,
-        args.ocr,
-        args.max_tokens,
-        args.overlap,
-    )

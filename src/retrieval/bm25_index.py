@@ -36,6 +36,11 @@ class KeywordEngine:
 
         print(f"Loaded {len(self.chunks)} chunks")
 
+        if not self.chunks:
+            print("[WARNING] No chunks found in data/processed/. "
+                  "Run the ingestion pipeline first to create .chunks.jsonl files.")
+            return
+
         tokenized_corpus = [
             chunk.lower().split()
             for chunk in self.chunks
@@ -69,7 +74,6 @@ class KeywordEngine:
     def search(self, query: str, k: int = 3) -> List[str]:
         if self.bm25 is None:
             raise ValueError("Index not loaded.")
-        
         
 
         STOPWORDS = {"what", "is", "the", "a", "an", "of", "to", "and", "in"}

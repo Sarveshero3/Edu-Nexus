@@ -118,14 +118,3 @@ class GraphBuilder:
         logger.info(summary)
         print(summary)
 
-
-if __name__ == "__main__":
-    builder = GraphBuilder()
-    
-    # Check if Neo4j is connected
-    if not builder.connector.verify_connectivity():
-        print("❌ Neoj4 not connected. Please check env vars.")
-    else:
-        test_text = "Professor Sarvesh teaches Advanced Python at Edu Nexus University."
-        print(f"\n--- Testing GraphBuilder with: '{test_text}' ---")
-        builder.process_text(test_text)

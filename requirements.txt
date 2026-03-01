@@ -1,33 +1,36 @@
+# ============================================================
+#  Edu Nexus — Requirements (Updated 2026-03-01)
+# ============================================================
+
 # --- Core & Environment ---
 python-dotenv>=1.0.0
 numpy>=1.24.0
 pandas>=2.0.0
-tqdm>=4.66.0  # Progress bars for ingestion
 
 # --- LLM Integration (The Brains) ---
-groq>=0.5.0             # Main LLM Interface
-google-generativeai>=0.5.0  # Gemini (For Swaraj's cleaning pipeline)
+groq>=0.5.0                   # Main LLM Interface (Groq Cloud)
 
-# --- Graph Database (Deep Brain) ---
-neo4j>=5.20.0           # Official Python Driver
+# --- Graph Database (Deep Brain — Neo4j) ---
+neo4j>=5.20.0                 # Official Python driver
 
-# --- Vector Database (Semantic Brain) ---
-faiss-cpu>=1.8.0        # CPU version to ensure it runs everywhere
-sentence-transformers>=2.7.0 # Free, local embeddings (HuggingFace)
+# --- Vector Database (Semantic Brain — FAISS) ---
+faiss-cpu>=1.8.0              # CPU vector similarity search
+sentence-transformers>=2.7.0  # Local embeddings (all-MiniLM-L6-v2)
+tf-keras                      # Backward-compat shim for Keras 3 / Transformers
 
-# --- Keyword Search (Fast Brain) ---
-rank_bm25>=0.2.2        # Simple, robust keyword retrieval
+# --- Keyword Search (Fast Brain — BM25) ---
+rank_bm25>=0.2.2              # Okapi BM25 keyword retrieval
+
+# --- PDF & Document Processing ---
+pdfplumber                    # PDF text extraction
+pypdf>=4.2.0                  # Alternate PDF reader
+python-docx                   # DOCX support
+pillow                        # Image processing (OCR fallback)
+pytesseract                   # OCR engine binding
+
+# --- Utilities ---
+tqdm>=4.66.0                  # Progress bars
+regex                         # Advanced regex patterns
 
 # --- UI & Deployment ---
-chainlit>=1.1.0         # Chat Interface
-
-# --- PDF Processing (For Swaraj) ---
-pypdf>=4.2.0
-
-pdfplumber
-tqdm
-regex
-pillow
-pytesseract
-
-python-docx
+chainlit>=2.0.0               # Chat interface (v2.x required)

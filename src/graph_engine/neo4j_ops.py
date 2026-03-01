@@ -92,12 +92,3 @@ class Neo4jConnector:
         if self._driver:
             self._driver.close()
             logger.info("Neo4j driver closed.")
-
-if __name__ == "__main__":
-    connector = Neo4jConnector()
-    print("Verifying connection...")
-    if connector.verify_connectivity():
-        print("✅ Connection Success")
-    else:
-        print("❌ Connection Failed")
-    connector.close()

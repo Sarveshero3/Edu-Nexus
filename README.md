@@ -24,12 +24,7 @@
 2. `python -m venv venv` and activate it.
 3. `pip install -r requirements.txt`
 4. Copy `.env.example` to `.env` and fill in API keys (GROQ_API_KEY, NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD).
-5. Setup the avatar (only needed once):
-   ```bash
-   mkdir .chainlit\public\avatars 2>nul
-   copy /Y logo.png ".chainlit\public\avatars\edu nexus.png"
-   ```
-6. Run the application:
+5. Run the application:
    ```bash
    chainlit run app.py
    ```

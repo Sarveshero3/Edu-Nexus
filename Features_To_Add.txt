@@ -1,0 +1,6 @@
+timer : whenever user gives input to the RAG it should start a timer and when the response is generated it should stop the timer and display the time taken to generate the response.
+create notes : user can create notes and save them separately and can access them later or within the same session.
+more session : user can create more sessions and can access them later or within the same session.
+database : whenever new chat the chats are needed to be saved in a encrypted form along with the vector database and bm25 database which are connected to Google drive or local browser storage or some other local free way.
+
+

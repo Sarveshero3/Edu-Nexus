@@ -1,116 +1,356 @@
 """
-Orchestrator Manager -- Edu Nexus
-==================================
-Connects BM25 keyword retrieval and Neo4j Graph Engine,
-decides which engine to invoke, fuses their context,
-and generates a real answer via Groq LLM.
+Orchestrator Manager -- Edu Nexus  (Phase 4 — LLM-Routed Tri-Hybrid)
+=====================================================================
+The central nervous system of Edu Nexus.  An **LLM Router**
+(openai/gpt-oss-120b) analyses each query and *decides* which
+retrieval brain(s) to invoke — like function calling:
+
+  1. Fast Brain   — BM25 keyword search   (src.retrieval.bm25_index)
+  2. Deep Brain   — Neo4j knowledge graph  (src.graph_engine)
+  3. Semantic Brain — FAISS vector search  (src.vector_engine.store)
+
+Only the chosen brain(s) execute.  Results are fused into a
+``context_block`` and sent to the Answer LLM for final synthesis.
 """
 
+from __future__ import annotations
+
 import asyncio
-import os
-import shutil
 import importlib.util
+import json
 import logging
+import os
+import re
+import shutil
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 from dotenv import load_dotenv
 from groq import Groq
 
 from src.retrieval.bm25_index import KeywordEngine
 from src.graph_engine.neo4j_ops import Neo4jConnector
+from src.graph_engine.builder import GraphBuilder
+from src.vector_engine.store import VectorStore
 
 load_dotenv()
 
+# ── Logging ────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger("Orchestrator")
 
-# ---- Project paths ----
+# ── Project paths ──────────────────────────────────────────────────────
 RAW_DIR = Path("data/raw")
 PROCESSED_DIR = Path("data/processed")
+ARTIFACTS_DIR = Path("data/artifacts")
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
-# ---- LLM config ----
-LLM_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-BM25_TOP_K = 5
-GRAPH_RESULT_LIMIT = 10
+# ── LLM config ────────────────────────────────────────────────────────
+ROUTER_MODEL = "openai/gpt-oss-120b"               # Decides strategy
+ANSWER_MODEL = "moonshotai/kimi-k2-instruct-0905"   # Generates answer
+BM25_TOP_K = 3
+VECTOR_TOP_K = 3
+GRAPH_RESULT_LIMIT = 8
+MAX_CHUNK_WORDS = 200
+MAX_CONTEXT_CHARS = 18000
 
-SYSTEM_PROMPT = (
-    "You are **Edu Nexus**, an intelligent academic assistant.\n"
-    "You are provided with two types of context to answer the user's question:\n\n"
-    "1. **Document Chunks** -- passages retrieved via BM25 keyword search from "
-    "the course material corpus.\n"
-    "2. **Knowledge-Graph Facts** -- structured triples (Subject -> Relation -> Object) "
-    "extracted from a Neo4j knowledge graph.\n\n"
-    "Guidelines:\n"
-    "- Synthesise both contexts into a clear, concise, and accurate answer.\n"
-    "- If one context is empty or irrelevant, rely on the other.\n"
-    "- If neither context is sufficient, say: "
-    "\"I don't have enough information in my knowledge base to answer this.\"\n"
-    "- Be helpful, detailed, and academic in tone.\n"
-    "- Format your answers in Markdown for readability.\n"
+# ── Router System Prompt ──────────────────────────────────────────────
+ROUTER_PROMPT = (
+    "You are the Strategy Router for a Tri-Hybrid RAG system.\n"
+    "Your job is to analyze the user's query and decide exactly which "
+    "retrieval brain(s) should be invoked to answer it.\n\n"
+    "Available brains:\n"
+    "1. **keyword** — BM25 lexical search. Best for: exact term lookups, "
+    "definitions, specific names, acronyms, keyword-heavy factual questions.\n"
+    "2. **graph** — Neo4j knowledge graph traversal. Best for: relationship "
+    "questions (\"how does X relate to Y?\"), entity connections, taxonomy, "
+    "cause-effect chains, structural/hierarchical queries.\n"
+    "3. **semantic** — FAISS dense vector similarity. Best for: conceptual "
+    "questions, paraphrased queries, thematic exploration, \"explain\" or "
+    "\"describe\" style questions, broad topic summaries.\n\n"
+    "Rules:\n"
+    "- Pick 1-3 brains.  Fewer is better — only select what the query needs.\n"
+    "- For a simple keyword lookup, just pick 'keyword'.\n"
+    "- For relationship queries, always include 'graph'.\n"
+    "- For broad/conceptual questions, include 'semantic'.\n"
+    "- If unsure, pick 'keyword' + 'semantic' (the safest combo).\n\n"
+    "Respond with ONLY a JSON object, nothing else:\n"
+    '{"brains": ["keyword", "graph", "semantic"], "reasoning": "short explanation"}\n'
+)
+
+# ── Answer System Prompt ──────────────────────────────────────────────
+ANSWER_PROMPT = (
+    "You are **Edu Nexus**, an elite academic assistant powered by a "
+    "Tri-Hybrid Retrieval-Augmented Generation engine.\n\n"
+    "You will receive a `context_block` containing evidence from the "
+    "retrieval systems that the orchestrator chose for this query.\n\n"
+    "── STRICT RULES ──\n"
+    "- You MUST answer using ONLY the information present in the "
+    "context_block.  Do NOT use prior knowledge.\n"
+    "- Cross-reference different sources to verify facts.\n"
+    "- If no relevant context is provided, respond: "
+    '"I don\'t have enough information in my knowledge base '
+    'to answer this."\n'
+    "- NEVER hallucinate facts, names, dates, or relationships.\n\n"
+    "── FORMAT ──\n"
+    "- Use Markdown for readability.\n"
+    "- Be concise, detailed, and academic in tone.\n"
+    "- Cite which retrieval source supported each claim "
+    "(e.g., [Graph], [Keyword Chunk 2], [Semantic Chunk 1]).\n"
 )
 
 
+# ====================================================================== #
+#  ORCHESTRATOR                                                           #
+# ====================================================================== #
+
 class OrchestratorManager:
     """
-    Real Orchestrator that ties BM25 + Neo4j Graph Engine + Groq LLM.
-    The orchestrator decides which retrieval engines to use based on
-    their availability and the query, then fuses the results.
+    LLM-Routed Tri-Hybrid RAG Orchestrator.
+
+    The Router LLM (openai/gpt-oss-120b) analyzes each query and decides
+    which brain(s) to invoke.  Only the selected brains execute.
+
+    Previous session data is purged on every startup.
+
+    Public API used by ``app.py``:
+        - ``generate_answer(query)`` — full RAG pipeline → dict
+        - ``get_response(query)``   — alias
+        - ``ingest_file(name, path)``  — upload + rebuild indices + build graph
     """
 
-    def __init__(self):
+    # ------------------------------------------------------------------ #
+    #  Startup cleanup                                                    #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _purge_local_data() -> None:
+        """Delete all files in data/raw, data/processed, and data/artifacts."""
+        for folder in (RAW_DIR, PROCESSED_DIR, ARTIFACTS_DIR):
+            if folder.exists():
+                for item in folder.iterdir():
+                    try:
+                        if item.is_file():
+                            item.unlink()
+                        elif item.is_dir():
+                            shutil.rmtree(item)
+                    except Exception as e:
+                        logger.warning(f"Could not remove {item}: {e}")
+                logger.info(f"Purged previous data from {folder}")
+
+    def _purge_neo4j(self) -> None:
+        """Delete ALL nodes and relationships from Neo4j for a fresh session."""
+        if not self._graph_ready:
+            return
+        try:
+            self.neo4j.run_cypher(
+                "MATCH (n) DETACH DELETE n"
+            )
+            logger.info("Deep Brain (Neo4j) -- all previous data purged.")
+        except Exception as e:
+            logger.warning(f"Could not purge Neo4j data: {e}")
+
+    # ------------------------------------------------------------------ #
+    #  Init                                                               #
+    # ------------------------------------------------------------------ #
+
+    def __init__(self) -> None:
+        # ── Wipe local previous session data ──────────────────────────
+        self._purge_local_data()
+
         RAW_DIR.mkdir(parents=True, exist_ok=True)
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+        ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
-        # ---- BM25 keyword engine ----
+        # ── 1. Fast Brain (BM25) ──────────────────────────────────────
         self.keyword_engine = KeywordEngine()
         try:
             self.keyword_engine.load_index()
             self._bm25_ready = True
-            logger.info("BM25 index loaded successfully.")
+            logger.info("Fast Brain (BM25) -- index loaded.")
         except FileNotFoundError:
             self._bm25_ready = False
-            logger.warning("BM25 index not found -- will be available after file upload.")
+            logger.warning(
+                "Fast Brain (BM25) -- index not found; "
+                "available after first file upload."
+            )
 
-        # ---- Neo4j graph connector ----
+        # ── 2. Deep Brain (Neo4j Graph) ───────────────────────────────
         self.neo4j = Neo4jConnector()
         self._graph_ready = self.neo4j.verify_connectivity()
         if self._graph_ready:
-            logger.info("Neo4j connection verified.")
+            logger.info("Deep Brain (Neo4j) -- connected.")
+            self._purge_neo4j()  # Clean old data
         else:
-            logger.warning("Neo4j not reachable -- graph retrieval disabled.")
+            logger.warning(
+                "Deep Brain (Neo4j) -- not reachable; "
+                "graph retrieval disabled."
+            )
 
-        # ---- Groq LLM client ----
+        # ── 3. Semantic Brain (FAISS vectors) ─────────────────────────
+        self.vector_store = VectorStore()
+        try:
+            self.vector_store.load_index()
+            self._vector_ready = True
+            logger.info("Semantic Brain (FAISS) -- index loaded.")
+        except FileNotFoundError:
+            self._vector_ready = False
+            logger.warning(
+                "Semantic Brain (FAISS) -- index not found; "
+                "available after first file upload."
+            )
+
+        # ── Groq LLM clients (Router + Answer) ───────────────────────
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             raise ValueError("GROQ_API_KEY not set in environment.")
         self.llm = Groq(api_key=api_key)
 
     # ================================================================== #
-    #  RETRIEVAL                                                          #
+    #  LLM ROUTER — decides which brain(s) to invoke                     #
+    # ================================================================== #
+
+    async def _route_query(self, query: str) -> dict:
+        """
+        Call the Router LLM to decide which brain(s) to use.
+
+        Returns
+        -------
+        dict with keys: brains (list[str]), reasoning (str)
+        """
+        # Build available list based on what's online
+        available = []
+        if self._bm25_ready:
+            available.append("keyword")
+        if self._graph_ready:
+            available.append("graph")
+        if self._vector_ready:
+            available.append("semantic")
+
+        if not available:
+            return {
+                "brains": [],
+                "reasoning": "No retrieval engines are online.",
+            }
+
+        user_msg = (
+            f"Available brains: {available}\n\n"
+            f"User query: \"{query}\"\n\n"
+            f"Which brain(s) should handle this query? "
+            f"Respond with ONLY the JSON object, no markdown, no explanation."
+        )
+
+        try:
+            completion = await asyncio.to_thread(
+                lambda: self.llm.chat.completions.create(
+                    model=ROUTER_MODEL,
+                    messages=[
+                        {"role": "system", "content": ROUTER_PROMPT},
+                        {"role": "user", "content": user_msg},
+                    ],
+                    temperature=0,
+                    max_tokens=200,
+                    stream=False,
+                )
+            )
+            raw = completion.choices[0].message.content or ""
+            raw = raw.strip()
+            logger.info(f"Router LLM raw response: {raw}")
+
+            # Parse JSON — handle multiple formats the model might return
+            data = self._parse_router_json(raw, available)
+
+            # Filter to only available brains
+            chosen = [b for b in data.get("brains", []) if b in available]
+            reasoning = data.get("reasoning", "No reasoning provided.")
+
+            if not chosen:
+                # Fallback: use all available
+                chosen = available
+                reasoning += " (Fallback: using all available brains.)"
+
+            return {"brains": chosen, "reasoning": reasoning}
+
+        except Exception as e:
+            logger.error(f"Router LLM failed: {e}. Falling back to all brains.")
+            return {
+                "brains": available,
+                "reasoning": f"Router error ({e}). Using all available brains as fallback.",
+            }
+
+    @staticmethod
+    def _parse_router_json(raw: str, available: List[str]) -> dict:
+        """
+        Robustly parse the Router LLM response into a dict.
+        Handles: plain JSON, markdown-wrapped JSON, partial text, empty.
+        """
+        if not raw:
+            return {"brains": available, "reasoning": "Empty router response."}
+
+        # 1. Try direct parse
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+
+        # 2. Strip markdown code fences: ```json ... ``` or ``` ... ```
+        cleaned = re.sub(r'```(?:json)?\s*', '', raw)
+        cleaned = cleaned.strip().rstrip('`').strip()
+        try:
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+
+        # 3. Find first { ... } block in the text
+        match = re.search(r'\{[^{}]*\}', raw, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # 4. Find { ... } allowing nested braces
+        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # 5. Last resort — look for brain names in the text
+        found = []
+        for brain in ["keyword", "graph", "semantic"]:
+            if brain in raw.lower():
+                found.append(brain)
+
+        if found:
+            return {"brains": found, "reasoning": f"Parsed from text: {raw[:100]}"}
+
+        # 6. Give up — return all available
+        logger.warning(f"Could not parse router response at all: {raw}")
+        return {"brains": available, "reasoning": f"Unparseable response. Fallback to all."}
+
+    # ================================================================== #
+    #  RETRIEVAL — one method per brain                                   #
     # ================================================================== #
 
     def _retrieve_bm25(self, query: str) -> List[str]:
-        """Top-k document chunks from BM25 keyword search."""
+        """Fast Brain: top-k keyword-matched chunks."""
         if not self._bm25_ready:
             return []
         try:
             results = self.keyword_engine.search(query, k=BM25_TOP_K)
-            logger.info(f"BM25 returned {len(results)} chunks.")
+            logger.info(f"Fast Brain returned {len(results)} chunks.")
             return results
         except Exception as e:
-            logger.error(f"BM25 search failed: {e}")
+            logger.error(f"Fast Brain search failed: {e}")
             return []
 
     def _retrieve_graph(self, query: str) -> List[Dict]:
-        """
-        Query Neo4j for triples whose node names CONTAIN any keyword
-        from the user query.
-        """
+        """Deep Brain: knowledge-graph triples matching query keywords."""
         if not self._graph_ready:
             return []
 
@@ -143,43 +383,49 @@ class OrchestratorManager:
 
         try:
             results = self.neo4j.run_cypher(cypher, params)
-            logger.info(f"Graph returned {len(results)} triples.")
+            logger.info(f"Deep Brain returned {len(results)} triples.")
             return results
         except Exception as e:
-            logger.error(f"Graph query failed: {e}")
+            logger.error(f"Deep Brain query failed: {e}")
+            return []
+
+    def _retrieve_vector(self, query: str) -> List[Tuple[str, float]]:
+        """Semantic Brain: top-k dense-vector similar chunks."""
+        if not self._vector_ready:
+            return []
+        try:
+            results = self.vector_store.search(query, k=VECTOR_TOP_K)
+            logger.info(f"Semantic Brain returned {len(results)} chunks.")
+            return results
+        except Exception as e:
+            logger.error(f"Semantic Brain search failed: {e}")
             return []
 
     # ================================================================== #
-    #  ORCHESTRATION LOGIC                                                #
+    #  CONTEXT FORMATTING                                                 #
     # ================================================================== #
 
-    def _decide_strategy(self, query: str) -> str:
-        """
-        Decide which retrieval engines to invoke based on availability.
-        Returns one of: 'both', 'bm25_only', 'graph_only', 'none'.
-        """
-        if self._bm25_ready and self._graph_ready:
-            return "both"
-        elif self._bm25_ready:
-            return "bm25_only"
-        elif self._graph_ready:
-            return "graph_only"
-        else:
-            return "none"
+    @staticmethod
+    def _truncate(text: str, max_words: int = MAX_CHUNK_WORDS) -> str:
+        """Truncate text to *max_words* words to control context size."""
+        words = text.split()
+        if len(words) <= max_words:
+            return text
+        return " ".join(words[:max_words]) + " ..."
 
     @staticmethod
-    def _format_bm25_context(chunks: List[str]) -> str:
+    def _format_keyword_context(chunks: List[str]) -> str:
         if not chunks:
-            return "_No document chunks retrieved._"
+            return "_No keyword chunks retrieved._"
         lines = []
         for i, chunk in enumerate(chunks, 1):
-            lines.append(f"**[Chunk {i}]**\n{chunk}")
+            lines.append(f"**[Keyword Chunk {i}]**\n{OrchestratorManager._truncate(chunk)}")
         return "\n\n".join(lines)
 
     @staticmethod
     def _format_graph_context(triples: List[Dict]) -> str:
         if not triples:
-            return "_No knowledge-graph facts retrieved._"
+            return "_No graph triples retrieved._"
         lines = []
         for t in triples:
             src = t.get("source", "?")
@@ -188,63 +434,143 @@ class OrchestratorManager:
             lines.append(f"- **{src}** -> _{rel}_ -> **{tgt}**")
         return "\n".join(lines)
 
+    @staticmethod
+    def _format_semantic_context(results: List[Tuple[str, float]]) -> str:
+        if not results:
+            return "_No semantic chunks retrieved._"
+        lines = []
+        for i, (chunk, score) in enumerate(results, 1):
+            lines.append(
+                f"**[Semantic Chunk {i}]** (score: {score:.4f})\n{OrchestratorManager._truncate(chunk)}"
+            )
+        return "\n\n".join(lines)
+
+    def _build_context_block(
+        self,
+        bm25_chunks: List[str],
+        graph_triples: List[Dict],
+        vector_results: List[Tuple[str, float]],
+        chosen_brains: List[str],
+    ) -> str:
+        """Fuse retrieval outputs into a single context_block."""
+        sections = []
+
+        if "keyword" in chosen_brains:
+            keyword_ctx = self._format_keyword_context(bm25_chunks)
+            sections.append(
+                f"## [Keyword Context]  (Fast Brain -- BM25)\n\n{keyword_ctx}"
+            )
+
+        if "graph" in chosen_brains:
+            graph_ctx = self._format_graph_context(graph_triples)
+            sections.append(
+                f"## [Graph Context]  (Deep Brain -- Neo4j)\n\n{graph_ctx}"
+            )
+
+        if "semantic" in chosen_brains:
+            semantic_ctx = self._format_semantic_context(vector_results)
+            sections.append(
+                f"## [Semantic Context]  (Semantic Brain -- FAISS)\n\n{semantic_ctx}"
+            )
+
+        block = "\n\n---\n\n".join(sections)
+
+        # Hard-cap to avoid exceeding Groq token limits
+        if len(block) > MAX_CONTEXT_CHARS:
+            logger.warning(
+                f"Context block too large ({len(block)} chars), "
+                f"truncating to {MAX_CONTEXT_CHARS} chars."
+            )
+            block = block[:MAX_CONTEXT_CHARS] + "\n\n... [context truncated]"
+
+        return block
+
+    # ================================================================== #
+    #  STRATEGY (human-readable label)                                    #
+    # ================================================================== #
+
+    def _decide_strategy(self) -> str:
+        """Return a human-readable label describing which brains are active."""
+        active = []
+        if self._bm25_ready:
+            active.append("Fast")
+        if self._graph_ready:
+            active.append("Deep")
+        if self._vector_ready:
+            active.append("Semantic")
+        return "+".join(active) if active else "none"
+
     # ================================================================== #
     #  MAIN ANSWER PIPELINE                                               #
     # ================================================================== #
 
-    async def get_response(self, query: str) -> dict:
+    async def generate_answer(self, query: str) -> dict:
         """
-        Full RAG pipeline:
-          1. Decide strategy (which engines are available)
-          2. Retrieve from BM25 and/or Graph in parallel
-          3. Fuse context
-          4. Call Groq LLM for final answer
-          5. Return structured result
+        LLM-Routed Tri-Hybrid RAG pipeline:
 
-        Returns dict with keys:
-          answer, bm25_chunks, graph_triples, strategy
+          1. Router LLM analyses the query and picks brain(s).
+          2. Only the chosen brains execute (concurrently).
+          3. Results are fused into a ``context_block``.
+          4. Answer LLM synthesises the final answer.
+          5. Return a structured dict.
+
+        Returns
+        -------
+        dict with keys:
+            answer, bm25_chunks, graph_triples, vector_results,
+            strategy, router_decision
         """
-        logger.info(f"Query: {query}")
+        logger.info(f"Query received: {query}")
 
-        # Step 1 -- Decide strategy
-        strategy = self._decide_strategy(query)
-        logger.info(f"Strategy: {strategy}")
+        strategy = self._decide_strategy()
+        logger.info(f"Available brains: {strategy}")
 
-        # Step 2 -- Retrieve (run in thread to not block async loop)
-        bm25_chunks: List[str] = []
-        graph_triples: List[Dict] = []
+        # ── Step 1: Router LLM decides which brain(s) ─────────────────
+        router_decision = await self._route_query(query)
+        chosen_brains = router_decision["brains"]
+        routing_reasoning = router_decision["reasoning"]
+        logger.info(f"Router chose: {chosen_brains} — {routing_reasoning}")
 
-        if strategy in ("both", "bm25_only"):
-            bm25_chunks = await asyncio.to_thread(self._retrieve_bm25, query)
+        # ── Step 2: Run ONLY chosen brains concurrently ───────────────
+        tasks = {}
+        if "keyword" in chosen_brains:
+            tasks["bm25"] = asyncio.to_thread(self._retrieve_bm25, query)
+        if "graph" in chosen_brains:
+            tasks["graph"] = asyncio.to_thread(self._retrieve_graph, query)
+        if "semantic" in chosen_brains:
+            tasks["vector"] = asyncio.to_thread(self._retrieve_vector, query)
 
-        if strategy in ("both", "graph_only"):
-            graph_triples = await asyncio.to_thread(self._retrieve_graph, query)
+        # Execute concurrently
+        results = {}
+        if tasks:
+            keys = list(tasks.keys())
+            values = await asyncio.gather(*tasks.values())
+            results = dict(zip(keys, values))
 
-        # Step 3 -- Format context
-        bm25_ctx = self._format_bm25_context(bm25_chunks)
-        graph_ctx = self._format_graph_context(graph_triples)
+        bm25_chunks = results.get("bm25", [])
+        graph_triples = results.get("graph", [])
+        vector_results = results.get("vector", [])
 
-        combined_context = (
-            "## Document Chunks (BM25 Keyword Search)\n\n"
-            f"{bm25_ctx}\n\n"
-            "---\n\n"
-            "## Knowledge-Graph Facts (Neo4j)\n\n"
-            f"{graph_ctx}"
+        # ── Step 3: Build context block ───────────────────────────────
+        context_block = self._build_context_block(
+            bm25_chunks, graph_triples, vector_results, chosen_brains
         )
 
-        # Step 4 -- Call LLM
-        if strategy == "none" and not bm25_chunks and not graph_triples:
+        # ── Step 4: Answer LLM synthesis ──────────────────────────────
+        has_context = bool(bm25_chunks or graph_triples or vector_results)
+
+        if not has_context and strategy == "none":
             answer_text = (
                 "I don't have any knowledge base loaded yet. "
                 "Please upload a document first using the attachment button."
             )
         else:
             messages = [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": ANSWER_PROMPT},
                 {
                     "role": "user",
                     "content": (
-                        f"### Context\n\n{combined_context}\n\n"
+                        f"### Context Block\n\n{context_block}\n\n"
                         f"---\n\n### Question\n\n{query}"
                     ),
                 },
@@ -252,10 +578,10 @@ class OrchestratorManager:
             try:
                 completion = await asyncio.to_thread(
                     lambda: self.llm.chat.completions.create(
-                        model=LLM_MODEL,
+                        model=ANSWER_MODEL,
                         messages=messages,
-                        temperature=0.4,
-                        max_tokens=1024,
+                        temperature=0.3,
+                        max_tokens=512,
                         stream=False,
                     )
                 )
@@ -271,8 +597,16 @@ class OrchestratorManager:
             "answer": answer_text,
             "bm25_chunks": bm25_chunks,
             "graph_triples": graph_triples,
+            "vector_results": vector_results,
             "strategy": strategy,
+            "router_decision": router_decision,
+            "chosen_brains": chosen_brains,
         }
+
+    # Backward-compatible alias used by app.py
+    async def get_response(self, query: str) -> dict:
+        """Alias for ``generate_answer`` to keep ``app.py`` compatible."""
+        return await self.generate_answer(query)
 
     # ================================================================== #
     #  FILE INGESTION (from UI uploads)                                   #
@@ -280,16 +614,21 @@ class OrchestratorManager:
 
     async def ingest_file(self, file_name: str, file_path: str) -> dict:
         """
-        Process an uploaded file:
-          1. Copy raw file to data/raw/
-          2. Run cleaner + chunker -> data/processed/*.chunks.jsonl
-          3. Rebuild BM25 index and reload it
+        Process an uploaded file end-to-end:
+
+          1. Copy raw file to ``data/raw/``.
+          2. Run cleaner + chunker -> ``data/processed/*.chunks.jsonl``.
+          3. Rebuild BM25 + FAISS indices.
+          4. Build Neo4j knowledge graph from chunks.
         """
         ext = Path(file_name).suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
             return {
                 "status": "error",
-                "message": f"Unsupported file type '{ext}'. Supported: {', '.join(SUPPORTED_EXTENSIONS)}",
+                "message": (
+                    f"Unsupported file type '{ext}'. "
+                    f"Supported: {', '.join(SUPPORTED_EXTENSIONS)}"
+                ),
                 "chunks_count": 0,
             }
 
@@ -298,13 +637,34 @@ class OrchestratorManager:
             shutil.copy2(file_path, dest)
             logger.info(f"Saved uploaded file to {dest}")
 
-            chunks_count = await asyncio.to_thread(self._run_ingestion, dest)
-            await asyncio.to_thread(self._rebuild_and_reload_bm25)
+            # Run ingestion (clean + chunk)
+            chunks_count, chunk_texts = await asyncio.to_thread(
+                self._run_ingestion, dest
+            )
+
+            # Rebuild BM25 + FAISS indices concurrently
+            await asyncio.gather(
+                asyncio.to_thread(self._rebuild_bm25),
+                asyncio.to_thread(self._rebuild_vector),
+            )
+
+            # Build Neo4j graph from chunks (if connected)
+            graph_nodes = 0
+            graph_rels = 0
+            if self._graph_ready and chunk_texts:
+                graph_nodes, graph_rels = await asyncio.to_thread(
+                    self._build_graph, chunk_texts
+                )
 
             return {
                 "status": "ok",
-                "message": f"Processed '{file_name}' -> {chunks_count} chunks. BM25 index rebuilt.",
+                "message": (
+                    f"Processed '{file_name}' -> {chunks_count} chunks. "
+                    "BM25 + FAISS indices rebuilt."
+                ),
                 "chunks_count": chunks_count,
+                "graph_nodes": graph_nodes,
+                "graph_rels": graph_rels,
             }
 
         except Exception as e:
@@ -320,8 +680,10 @@ class OrchestratorManager:
     # ================================================================== #
 
     @staticmethod
-    def _run_ingestion(file_path: Path) -> int:
-        """Run the cleaner + chunker on a single file. Returns chunk count."""
+    def _run_ingestion(file_path: Path) -> Tuple[int, List[str]]:
+        """Run the cleaner + chunker on a single file.
+        Returns (chunk_count, list_of_chunk_texts).
+        """
         cleaner_path = Path(__file__).parent.parent / "ingest" / "cleaner.py"
         spec = importlib.util.spec_from_file_location("cleaner", cleaner_path)
         cleaner = importlib.util.module_from_spec(spec)
@@ -340,31 +702,91 @@ class OrchestratorManager:
                     paragraphs.append(p.text.strip())
             for table in doc.tables:
                 for row in table.rows:
-                    cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                    cells = [
+                        c.text.strip() for c in row.cells if c.text.strip()
+                    ]
                     if cells:
                         paragraphs.append(" | ".join(cells))
             pages = ["\n".join(paragraphs)]
         elif ext in (".txt", ".md"):
             pages = [file_path.read_text(encoding="utf-8", errors="ignore")]
         else:
-            return 0
+            return 0, []
 
         cleaned_text = cleaner.clean_pages(pages, source_type="pdf")
         basename = file_path.stem
         cleaner.write_cleaned_text(PROCESSED_DIR, basename, cleaned_text)
-        chunks = cleaner.chunk_text_by_sentences(cleaned_text, max_tokens=500, overlap=100)
-        cleaner.write_chunks_jsonl(PROCESSED_DIR, basename, file_path, chunks)
+        chunks = cleaner.chunk_text_by_sentences(
+            cleaned_text, max_tokens=500, overlap=100
+        )
+        cleaner.write_chunks_jsonl(
+            PROCESSED_DIR, basename, file_path, chunks
+        )
 
+        chunk_texts = [text for (_, _, text) in chunks]
         logger.info(f"Ingested {file_path.name}: {len(chunks)} chunks")
-        return len(chunks)
+        return len(chunks), chunk_texts
 
-    def _rebuild_and_reload_bm25(self):
-        """Rebuild BM25 index and reload it into this instance."""
+    def _rebuild_bm25(self) -> None:
+        """Rebuild and reload the BM25 index."""
         self.keyword_engine.build_index()
         try:
             self.keyword_engine.load_index()
             self._bm25_ready = True
-            logger.info("BM25 index rebuilt and reloaded.")
+            logger.info("Fast Brain (BM25) index rebuilt and reloaded.")
         except FileNotFoundError:
             self._bm25_ready = False
-            logger.warning("BM25 rebuild produced no index.")
+            logger.warning("Fast Brain rebuild produced no index.")
+
+    def _rebuild_vector(self) -> None:
+        """Rebuild and reload the FAISS vector index."""
+        self.vector_store.build_index()
+        try:
+            self.vector_store.load_index()
+            self._vector_ready = True
+            logger.info("Semantic Brain (FAISS) index rebuilt and reloaded.")
+        except FileNotFoundError:
+            self._vector_ready = False
+            logger.warning("Semantic Brain rebuild produced no index.")
+
+    def _build_graph(self, chunk_texts: List[str]) -> Tuple[int, int]:
+        """
+        Build Neo4j knowledge graph from document chunks.
+        Uses GraphBuilder + GraphExtractor to extract entities/relations
+        from each chunk and push them to Neo4j.
+
+        Returns (total_nodes_estimate, total_rels_estimate).
+        """
+        try:
+            builder = GraphBuilder()
+            total_nodes = 0
+            total_rels = 0
+
+            # Process chunks in batches to avoid too many LLM calls
+            # Combine every 3 chunks into one block for extraction
+            batch_size = 3
+            for i in range(0, len(chunk_texts), batch_size):
+                batch = chunk_texts[i:i + batch_size]
+                combined = "\n\n".join(batch)
+                # Truncate to avoid huge LLM calls
+                words = combined.split()
+                if len(words) > 800:
+                    combined = " ".join(words[:800])
+
+                try:
+                    builder.process_text(combined)
+                    # We can't easily count from builder, estimate
+                    total_nodes += 1  # at least one batch processed
+                except Exception as e:
+                    logger.warning(f"Graph build batch {i//batch_size} failed: {e}")
+                    continue
+
+            logger.info(
+                f"Graph build complete: processed {len(chunk_texts)} chunks "
+                f"in {(len(chunk_texts) + batch_size - 1) // batch_size} batches."
+            )
+            return total_nodes, total_rels
+
+        except Exception as e:
+            logger.error(f"Graph building failed: {e}")
+            return 0, 0

@@ -69,11 +69,3 @@ class GraphExtractor:
         except Exception as e:
             print(f"Error during extraction: {e}")
             return {"nodes": [], "relationships": []}
-
-if __name__ == "__main__":
-    extractor = GraphExtractor()
-    test_text = "Professor Sarvesh teaches Advanced Python at Edu Nexus University."
-    print(f"Input: {test_text}\n")
-    result = extractor.extract(test_text)
-    print("Extracted Graph Data:")
-    print(json.dumps(result, indent=2))

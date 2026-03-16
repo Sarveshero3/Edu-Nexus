@@ -677,17 +677,6 @@ class OrchestratorManager:
         return any(marker in q for marker in multi_markers)
 
     # ================================================================== #
-    #  SOURCE GUESSING (for workspace filtering)                           #
-    # ================================================================== #
-
-    @staticmethod
-    def _guess_chunk_source(chunk: str) -> str:
-        """Extract the source filename from a chunk's [Source: …] tag."""
-        import re as _re
-        m = _re.search(r"\[Source:\s*(.+?)\]", chunk)
-        return m.group(1).strip() if m else ""
-
-    # ================================================================== #
     #  STRATEGY (human-readable label)                                    #
     # ================================================================== #
 

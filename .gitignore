@@ -47,3 +47,12 @@ data/artifacts/*
 
 .agent/*
 .agent
+
+# Next.js Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+
+# Chainlit (legacy)
+.chainlit/

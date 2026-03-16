@@ -35,4 +35,6 @@ tqdm>=4.66.0                  # Progress bars
 regex                         # Advanced regex patterns
 
 # --- UI & Deployment ---
-chainlit>=2.0.0               # Chat interface (v2.x required)
+fastapi
+uvicorn
+python-multipart

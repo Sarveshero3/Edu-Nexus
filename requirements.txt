@@ -25,6 +25,8 @@ rank_bm25>=0.2.2              # Okapi BM25 keyword retrieval
 pdfplumber                    # PDF text extraction
 pypdf>=4.2.0                  # Alternate PDF reader
 python-docx                   # DOCX support
+python-pptx                   # PPTX (PowerPoint) text extraction
+openpyxl                      # XLSX (Excel) text extraction
 pillow                        # Image processing (OCR fallback)
 pytesseract                   # OCR engine binding
 

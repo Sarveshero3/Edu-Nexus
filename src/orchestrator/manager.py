@@ -32,6 +32,8 @@ from src.retrieval.bm25_index import KeywordEngine
 from src.graph_engine.neo4j_ops import Neo4jConnector
 from src.graph_engine.builder import GraphBuilder
 from src.vector_engine.store import VectorStore
+from src.ingest.extractor import extract_text
+from src.ingest.extractor import SUPPORTED_EXTENSIONS as _EXTRACTOR_EXTENSIONS
 
 load_dotenv()
 
@@ -46,7 +48,7 @@ logger = logging.getLogger("Orchestrator")
 RAW_DIR = Path("data/raw")
 PROCESSED_DIR = Path("data/processed")
 ARTIFACTS_DIR = Path("data/artifacts")
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+SUPPORTED_EXTENSIONS = _EXTRACTOR_EXTENSIONS  # single source of truth from extractor
 
 # ── LLM config ────────────────────────────────────────────────────────
 ROUTER_MODEL = "openai/gpt-oss-120b"               # Decides strategy
@@ -164,6 +166,9 @@ class OrchestratorManager:
         RAW_DIR.mkdir(parents=True, exist_ok=True)
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+
+        # ── File registry (tracks all ingested documents) ─────────────
+        self._ingested_files: List[str] = []
 
         # ── 1. Fast Brain (BM25) ──────────────────────────────────────
         self.keyword_engine = KeywordEngine()
@@ -337,12 +342,26 @@ class OrchestratorManager:
     #  RETRIEVAL — one method per brain                                   #
     # ================================================================== #
 
+    @property
+    def _multi_file(self) -> bool:
+        """True when more than one document has been ingested."""
+        return len(self._ingested_files) > 1
+
     def _retrieve_bm25(self, query: str) -> List[str]:
-        """Fast Brain: top-k keyword-matched chunks."""
+        """Fast Brain: keyword-matched chunks.
+        Uses per-file retrieval when multiple files are ingested so
+        every document is represented (the detective's Ctrl+F runs
+        across ALL case files, not just the top-scoring one).
+        """
         if not self._bm25_ready:
             return []
         try:
-            results = self.keyword_engine.search(query, k=BM25_TOP_K)
+            if self._multi_file:
+                results = self.keyword_engine.search_per_file(
+                    query, k_per_file=BM25_TOP_K
+                )
+            else:
+                results = self.keyword_engine.search(query, k=BM25_TOP_K)
             logger.info(f"Fast Brain returned {len(results)} chunks.")
             return results
         except Exception as e:
@@ -350,7 +369,9 @@ class OrchestratorManager:
             return []
 
     def _retrieve_graph(self, query: str) -> List[Dict]:
-        """Deep Brain: knowledge-graph triples matching query keywords."""
+        """Deep Brain: knowledge-graph triples matching query keywords.
+        The detective's string board — connects entities across ALL files.
+        """
         if not self._graph_ready:
             return []
 
@@ -373,11 +394,14 @@ class OrchestratorManager:
             for i in range(len(keywords))
         )
 
+        # Increase limit when multiple files exist
+        limit = GRAPH_RESULT_LIMIT * 2 if self._multi_file else GRAPH_RESULT_LIMIT
+
         cypher = (
             f"MATCH (a)-[r]->(b) "
             f"WHERE {where_clauses} "
             f"RETURN a.name AS source, type(r) AS relation, b.name AS target "
-            f"LIMIT {GRAPH_RESULT_LIMIT}"
+            f"LIMIT {limit}"
         )
         params = {f"kw{i}": kw for i, kw in enumerate(keywords)}
 
@@ -390,11 +414,20 @@ class OrchestratorManager:
             return []
 
     def _retrieve_vector(self, query: str) -> List[Tuple[str, float]]:
-        """Semantic Brain: top-k dense-vector similar chunks."""
+        """Semantic Brain: dense-vector similar chunks.
+        Uses per-file retrieval when multiple files are ingested so
+        every document is represented (the detective reads diaries
+        from ALL suspects, not just the most talkative one).
+        """
         if not self._vector_ready:
             return []
         try:
-            results = self.vector_store.search(query, k=VECTOR_TOP_K)
+            if self._multi_file:
+                results = self.vector_store.search_per_file(
+                    query, k_per_file=VECTOR_TOP_K
+                )
+            else:
+                results = self.vector_store.search(query, k=VECTOR_TOP_K)
             logger.info(f"Semantic Brain returned {len(results)} chunks.")
             return results
         except Exception as e:
@@ -455,6 +488,18 @@ class OrchestratorManager:
         """Fuse retrieval outputs into a single context_block."""
         sections = []
 
+        # ── File inventory (tells the LLM which documents are loaded) ─
+        if self._ingested_files:
+            file_list = "\n".join(
+                f"  {i}. {name}" for i, name in enumerate(self._ingested_files, 1)
+            )
+            sections.append(
+                f"## [Document Inventory]\n\n"
+                f"The following {len(self._ingested_files)} file(s) have been "
+                f"uploaded and indexed:\n{file_list}\n\n"
+                f"All retrieval results below come from these documents."
+            )
+
         if "keyword" in chosen_brains:
             keyword_ctx = self._format_keyword_context(bm25_chunks)
             sections.append(
@@ -484,6 +529,35 @@ class OrchestratorManager:
             block = block[:MAX_CONTEXT_CHARS] + "\n\n... [context truncated]"
 
         return block
+
+    # ================================================================== #
+    #  MULTI-FILE QUERY DETECTION                                          #
+    # ================================================================== #
+
+    @staticmethod
+    def _is_multi_file_query(query: str) -> bool:
+        """
+        Detect whether the user's query is about multiple / all uploaded files.
+
+        Triggers on patterns like:
+          - "summarize both files"
+          - "compare the documents"
+          - "tell me about all files"
+          - "what do these files say"
+          - "overview of everything"
+        """
+        q = query.lower()
+        multi_markers = [
+            "both file", "all file", "all document", "every file",
+            "every document", "each file", "each document",
+            "these file", "these document", "the files", "the documents",
+            "compare", "contrast", "differences between",
+            "similarities between", "overview of everything",
+            "summarize everything", "summarise everything",
+            "all of them", "both of them",
+            "across file", "across document",
+        ]
+        return any(marker in q for marker in multi_markers)
 
     # ================================================================== #
     #  STRATEGY (human-readable label)                                    #
@@ -529,6 +603,25 @@ class OrchestratorManager:
         router_decision = await self._route_query(query)
         chosen_brains = router_decision["brains"]
         routing_reasoning = router_decision["reasoning"]
+
+        # If multiple files AND a broad/meta query, force all brains
+        # so every file gets covered from every angle
+        if self._multi_file and self._is_multi_file_query(query):
+            available = []
+            if self._bm25_ready:
+                available.append("keyword")
+            if self._graph_ready:
+                available.append("graph")
+            if self._vector_ready:
+                available.append("semantic")
+            chosen_brains = available
+            routing_reasoning += (
+                " [Override: multi-file query detected — "
+                "using all available brains for full coverage.]"
+            )
+            router_decision["brains"] = chosen_brains
+            router_decision["reasoning"] = routing_reasoning
+
         logger.info(f"Router chose: {chosen_brains} — {routing_reasoning}")
 
         # ── Step 2: Run ONLY chosen brains concurrently ───────────────
@@ -637,6 +730,10 @@ class OrchestratorManager:
             shutil.copy2(file_path, dest)
             logger.info(f"Saved uploaded file to {dest}")
 
+            # Track in file registry
+            if file_name not in self._ingested_files:
+                self._ingested_files.append(file_name)
+
             # Run ingestion (clean + chunk)
             chunks_count, chunk_texts = await asyncio.to_thread(
                 self._run_ingestion, dest
@@ -681,7 +778,7 @@ class OrchestratorManager:
 
     @staticmethod
     def _run_ingestion(file_path: Path) -> Tuple[int, List[str]]:
-        """Run the cleaner + chunker on a single file.
+        """Run the unified extractor + cleaner + chunker on a single file.
         Returns (chunk_count, list_of_chunk_texts).
         """
         cleaner_path = Path(__file__).parent.parent / "ingest" / "cleaner.py"
@@ -689,28 +786,10 @@ class OrchestratorManager:
         cleaner = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cleaner)
 
-        ext = file_path.suffix.lower()
-
-        if ext == ".pdf":
-            pages = cleaner.extract_text_from_pdf(file_path)
-        elif ext == ".docx":
-            from docx import Document
-            doc = Document(file_path)
-            paragraphs = []
-            for p in doc.paragraphs:
-                if p.text and p.text.strip():
-                    paragraphs.append(p.text.strip())
-            for table in doc.tables:
-                for row in table.rows:
-                    cells = [
-                        c.text.strip() for c in row.cells if c.text.strip()
-                    ]
-                    if cells:
-                        paragraphs.append(" | ".join(cells))
-            pages = ["\n".join(paragraphs)]
-        elif ext in (".txt", ".md"):
-            pages = [file_path.read_text(encoding="utf-8", errors="ignore")]
-        else:
+        # ── Unified extraction (supports PDF, DOCX, PPTX, XLSX, CSV, TXT, MD)
+        pages = extract_text(file_path)
+        if not pages:
+            logger.warning(f"No text extracted from {file_path.name}")
             return 0, []
 
         cleaned_text = cleaner.clean_pages(pages, source_type="pdf")

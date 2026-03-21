@@ -25,8 +25,8 @@ call venv\Scripts\activate.bat
 pip install -r requirements.txt
 echo       Done.
 
-REM ------ Step 3: Install Next.js dependencies ------
-echo [3/3] Installing Next.js frontend dependencies...
+REM ------ Step 3: Install Vite + React frontend dependencies ------
+echo [3/3] Installing Vite frontend dependencies...
 cd frontend
 call npm install
 cd ..

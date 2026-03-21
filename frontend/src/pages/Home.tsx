@@ -1,170 +1,141 @@
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Zap, Brain, GitBranch, ArrowRight, Sparkles } from 'lucide-react'
+import { Zap, Brain, GitBranch } from 'lucide-react'
+import PublicNavbar from '@/components/layout/PublicNavbar'
 import PageTransition from '@/components/common/PageTransition'
-import BlurFade from '@/components/magicui/BlurFade'
-import AnimatedGradientText from '@/components/magicui/AnimatedGradientText'
+import GlassCard from '@/components/common/GlassCard'
+import PillButton from '@/components/common/PillButton'
 
 const features = [
   {
     icon: Zap,
     title: 'Fast Brain (BM25)',
     desc: 'Lightning-fast keyword retrieval using BM25 ranking. Perfect for precise term matching across large document collections.',
-    gradient: 'from-cyan-500/15 to-blue-500/15',
-    borderColor: 'border-cyan-500/20',
-    iconColor: 'text-cyan-400',
+    color: 'text-accent-cyan',
   },
   {
     icon: Brain,
     title: 'Semantic Brain (FAISS)',
     desc: 'Deep vector similarity search powered by FAISS. Understands meaning and context beyond exact keyword matches.',
-    gradient: 'from-purple-500/15 to-violet-500/15',
-    borderColor: 'border-purple-500/20',
-    iconColor: 'text-purple-400',
+    color: 'text-accent-purple',
   },
   {
     icon: GitBranch,
     title: 'Deep Brain (Neo4j)',
     desc: 'Knowledge graph traversal via Neo4j. Maps relationships between concepts for interconnected academic insights.',
-    gradient: 'from-violet-500/15 to-fuchsia-500/15',
-    borderColor: 'border-violet-500/20',
-    iconColor: 'text-violet-400',
+    color: 'text-accent-violet',
   },
 ]
+
+const containerAnim = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.15 } },
+}
+
+const itemAnim = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
+}
 
 export default function Home() {
   const navigate = useNavigate()
 
   return (
     <PageTransition>
-      {/* ── HERO ──────────────────────────────────── */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 text-center">
-        {/* Title — Animated Gradient */}
-        <BlurFade delay={0.15} inView>
-          <h1
-            className="text-7xl md:text-8xl lg:text-9xl font-extrabold tracking-tight"
-            style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              textShadow: '0 4px 40px rgba(139,92,246,0.35), 0 0 80px rgba(34,211,238,0.2)',
-            }}
-          >
-            <AnimatedGradientText
-              colorFrom="#22d3ee"
-              colorVia="#a78bfa"
-              colorTo="#22d3ee"
-              speed={0.8}
-            >
-              Edu Nexus
-            </AnimatedGradientText>
-          </h1>
-        </BlurFade>
+      {/* HERO */}
+      <section className="relative min-h-screen bg-bg-primary flex flex-col">
+        <PublicNavbar />
 
-        {/* Subtitle */}
-        <BlurFade delay={0.3} inView>
-          <p
-            className="text-2xl md:text-3xl text-white font-semibold mt-5 tracking-tight"
-            style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              textShadow: '0 2px 24px rgba(0,0,0,0.6)',
-            }}
+        <div className="flex-1 flex flex-col items-center justify-center px-6 pt-24 pb-16 text-center">
+          {/* Badge */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.2 }}
+            className="inline-flex items-center gap-2 bg-accent-cyan/20 text-accent-cyan px-4 py-1.5 rounded-full text-sm font-semibold mb-8"
+          >
+            <span className="w-2 h-2 rounded-full bg-accent-cyan animate-pulse" />
+            Tri-Hybrid RAG Engine Live
+          </motion.div>
+
+          {/* Heading */}
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+            className="text-5xl md:text-7xl font-extrabold text-white leading-tight tracking-tight max-w-4xl"
           >
             The Intelligent Backbone for Academic Mastery
-          </p>
-        </BlurFade>
+          </motion.h1>
 
-        {/* Description — brighter */}
-        <BlurFade delay={0.45} inView>
-          <p
-            className="text-white/80 text-lg md:text-xl max-w-2xl mt-5 leading-relaxed font-medium"
-            style={{ textShadow: '0 2px 16px rgba(0,0,0,0.7)' }}
+          {/* Sub */}
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45, duration: 0.5 }}
+            className="text-text-muted text-lg md:text-xl max-w-2xl mt-6"
           >
             Upload research papers, query across three AI retrieval engines, and build
             knowledge graphs — all in one unified academic workspace.
-          </p>
-        </BlurFade>
+          </motion.p>
 
-        {/* CTAs */}
-        <BlurFade delay={0.6} inView>
-          <div className="flex flex-wrap items-center gap-4 mt-10">
-            <button
-              onClick={() => navigate('/sign-up')}
-              className="group relative inline-flex items-center gap-2.5 px-8 py-4 rounded-full bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-semibold text-base shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-[1.03]"
-            >
-              Launch Workspace
-              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-            </button>
-            <button
-              onClick={() => navigate('/sign-in')}
-              className="inline-flex items-center gap-2 px-8 py-4 rounded-full border border-white/20 text-white font-semibold text-base hover:bg-white/5 hover:border-white/30 backdrop-blur-sm transition-all duration-300"
-            >
-              Sign In
-            </button>
-          </div>
-        </BlurFade>
+          {/* CTAs */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="flex flex-wrap items-center gap-4 mt-10"
+          >
+            <PillButton onClick={() => navigate('/sign-up')}>Launch Workspace →</PillButton>
+            <PillButton variant="ghost" onClick={() => navigate('/docs')}>View Documentation</PillButton>
+          </motion.div>
 
-        {/* Scroll indicator */}
-        <BlurFade delay={0.8} inView>
-          <div className="mt-16">
-            <div className="w-6 h-10 rounded-full border-2 border-white/25 flex items-start justify-center pt-2">
-              <motion.div
-                animate={{ y: [0, 12, 0] }}
-                transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
-                className="w-1.5 h-1.5 rounded-full bg-cyan-400"
-              />
+          {/* Spline placeholder */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.8, duration: 0.8 }}
+            className="w-full max-w-3xl mt-16"
+          >
+            <div
+              id="spline-hero"
+              className="w-full h-[500px] border-2 border-dashed border-[rgba(255,255,255,0.2)] rounded-[24px] flex items-center justify-center text-text-muted text-sm"
+            >
+              [ SPLINE 3D EMBED ZONE ]
             </div>
-          </div>
-        </BlurFade>
+          </motion.div>
+        </div>
       </section>
 
-      {/* ── FEATURES — Spline shows through, gradient top edge for smooth blend ── */}
-      <section id="features" className="relative py-32 px-6">
-        {/* Gradient overlay: smooth blend from transparent to semi-opaque */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: 'linear-gradient(to bottom, transparent 0%, rgba(6,8,15,0.35) 15%, rgba(6,8,15,0.35) 85%, transparent 100%)',
-          }}
-        />
+      {/* FEATURES */}
+      <section id="features" className="bg-bg-app py-24 px-6">
+        <div className="max-w-6xl mx-auto">
+          <motion.h2
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-3xl md:text-4xl font-bold text-center text-white mb-16"
+          >
+            Tri-Hybrid Intelligence
+          </motion.h2>
 
-        <div className="relative max-w-6xl mx-auto">
-          <div className="text-center mb-20">
-            <BlurFade delay={0} inView inViewMargin="-100px">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-medium mb-6">
-                <Sparkles size={14} />
-                Powered by Three AI Brains
-              </div>
-            </BlurFade>
-            <BlurFade delay={0.1} inView inViewMargin="-100px">
-              <h2
-                className="text-4xl md:text-5xl font-bold text-white"
-                style={{
-                  fontFamily: "'Space Grotesk', sans-serif",
-                  textShadow: '0 4px 24px rgba(0,0,0,0.6)',
-                }}
-              >
-                Tri-Hybrid Intelligence
-              </h2>
-            </BlurFade>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {features.map((f, i) => (
-              <BlurFade key={f.title} delay={0.15 * i} inView inViewMargin="-80px">
-                <div className={`group relative p-8 h-full rounded-2xl border ${f.borderColor} bg-gradient-to-br ${f.gradient} backdrop-blur-xl transition-all duration-300 hover:scale-[1.03] hover:shadow-lg`}>
-                  <div className="w-14 h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                    <f.icon className={f.iconColor} size={28} />
-                  </div>
-                  <h3
-                    className="text-xl font-bold text-white mb-3"
-                    style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}
-                  >
-                    {f.title}
-                  </h3>
-                  <p className="text-white/60 text-sm leading-relaxed">{f.desc}</p>
-                </div>
-              </BlurFade>
+          <motion.div
+            variants={containerAnim}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true }}
+            className="grid md:grid-cols-3 gap-6"
+          >
+            {features.map((f) => (
+              <motion.div key={f.title} variants={itemAnim}>
+                <GlassCard className="p-8 h-full">
+                  <f.icon className={`${f.color} mb-4`} size={32} />
+                  <h3 className="text-xl font-bold text-white mb-3">{f.title}</h3>
+                  <p className="text-text-muted text-sm leading-relaxed">{f.desc}</p>
+                </GlassCard>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         </div>
       </section>
     </PageTransition>

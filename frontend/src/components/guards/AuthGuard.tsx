@@ -10,7 +10,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   const token = useAuth((s) => s.token)
 
   if (!user || !token) {
-    return <Navigate to="/" replace />
+    return <Navigate to="/sign-in" replace />
   }
 
   return <>{children}</>

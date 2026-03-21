@@ -2,7 +2,6 @@ import { Routes, Route } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
 import AuthGuard from '@/components/guards/AuthGuard'
 import AppShell from '@/components/layout/AppShell'
-import PublicLayout from '@/components/layout/PublicLayout'
 import Home from '@/pages/Home'
 import SignUp from '@/pages/SignUp'
 import SignIn from '@/pages/SignIn'
@@ -23,14 +22,11 @@ export default function App() {
   return (
     <AnimatePresence mode="wait">
       <Routes>
-        {/* Public routes — shared Spline background via PublicLayout */}
-        <Route element={<PublicLayout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/sign-in" element={<SignIn />} />
-          <Route path="/sign-up" element={<SignUp />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-        </Route>
-
+        {/* Public routes */}
+        <Route path="/" element={<Home />} />
+        <Route path="/sign-in" element={<SignIn />} />
+        <Route path="/sign-up" element={<SignUp />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/docs" element={<Docs />} />
 
         {/* Protected: Onboarding */}

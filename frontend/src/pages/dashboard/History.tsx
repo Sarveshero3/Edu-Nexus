@@ -1,102 +1,46 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronDown, MessageSquare, Trash2, AlertCircle } from 'lucide-react'
+import { ChevronDown, RotateCw, MessageSquare } from 'lucide-react'
 import PageTransition from '@/components/common/PageTransition'
 import GlassCard from '@/components/common/GlassCard'
 import EngineBadge from '@/components/common/EngineBadge'
+import PillButton from '@/components/common/PillButton'
 import { cn } from '@/lib/utils'
-import { useWorkspace, type Message } from '@/stores/workspaceStore'
 
-/**
- * History — Workspace-Scoped
- * Shows all messages from the active workspace's chat sessions,
- * ordered by most recent. Each entry is expandable.
- */
+type Engine = 'bm25' | 'faiss' | 'neo4j'
 
-const tabs = ['All', 'BM25', 'FAISS', 'Neo4j', 'Hybrid'] as const
-
-interface FlatEntry {
+interface QueryItem {
   id: string
-  query: string
+  text: string
+  engine: Engine
+  time: string
+  source: string
   answer: string
-  engine_used: string
-  timestamp: string
-  chatTitle: string
-  chatId: string
 }
+
+const mockQueries: QueryItem[] = [
+  { id: '1', text: 'What are the key differences between supervised and unsupervised learning?', engine: 'bm25', time: '2 hours ago', source: 'machine_learning_fundamentals.pdf', answer: 'Supervised learning uses labeled data to learn mappings, while unsupervised learning discovers hidden patterns in unlabeled data...' },
+  { id: '2', text: 'Explain backpropagation algorithm step by step', engine: 'faiss', time: '5 hours ago', source: 'deep_learning_notes.pdf', answer: 'Backpropagation involves: 1) Forward pass computing predictions, 2) Loss calculation, 3) Backward pass computing gradients via chain rule...' },
+  { id: '3', text: 'How do attention mechanisms relate to transformer architecture?', engine: 'neo4j', time: '1 day ago', source: 'nlp_foundations.docx', answer: 'Attention mechanisms form the core of transformer architecture, allowing the model to weigh the importance of different input tokens...' },
+  { id: '4', text: 'Compare CNN architectures: VGG, ResNet, and Inception', engine: 'bm25', time: '2 days ago', source: 'computer_vision_intro.pdf', answer: 'VGG uses uniform 3x3 convolutions, ResNet introduces skip connections to solve vanishing gradients, and Inception uses parallel convolution paths...' },
+  { id: '5', text: 'What is the vanishing gradient problem?', engine: 'faiss', time: '3 days ago', source: 'deep_learning_notes.pdf', answer: 'The vanishing gradient problem occurs when gradients become exponentially small during backpropagation through many layers...' },
+]
+
+const tabs = ['All', 'BM25', 'FAISS', 'Neo4j'] as const
 
 export default function History() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<string>('All')
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-
-  const activeWorkspaceId = useWorkspace((s) => s.activeWorkspaceId)
-  const getActiveWorkspace = useWorkspace((s) => s.getActiveWorkspace)
-  const setActiveChatSession = useWorkspace((s) => s.setActiveChatSession)
-  const deleteChatSession = useWorkspace((s) => s.deleteChatSession)
-
-  const ws = getActiveWorkspace()
-
-  // Flatten all Q/A pairs from the active workspace's chat sessions
-  const entries: FlatEntry[] = []
-  if (ws) {
-    for (const session of ws.chatSessions) {
-      const msgs = session.messages
-      for (let i = 0; i < msgs.length; i++) {
-        const m = msgs[i]
-        if (m.role === 'user') {
-          // Find next assistant message
-          const next: Message | undefined = msgs[i + 1]
-          entries.push({
-            id: m.id,
-            query: m.content,
-            answer: next?.role === 'assistant' ? next.content : '(no response)',
-            engine_used: next?.engine_used || 'none',
-            timestamp: m.timestamp,
-            chatTitle: session.title,
-            chatId: session.id,
-          })
-        }
-      }
-    }
-  }
-
-  // Sort newest first
-  entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  const [expandedId, setExpandedId] = useState<string | null>('1')
 
   const filtered = activeTab === 'All'
-    ? entries
-    : entries.filter((q) => q.engine_used === activeTab.toLowerCase())
-
-  const timeAgo = (ts: string) => {
-    const diff = Date.now() - new Date(ts).getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 60) return `${mins}m ago`
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24) return `${hrs}h ago`
-    return `${Math.floor(hrs / 24)}d ago`
-  }
-
-  if (!ws) {
-    return (
-      <PageTransition className="p-6 lg:p-8">
-        <GlassCard hover={false} className="p-6">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="text-text-muted" size={20} />
-            <p className="text-text-muted text-sm">Select a workspace to see history.</p>
-          </div>
-        </GlassCard>
-      </PageTransition>
-    )
-  }
+    ? mockQueries
+    : mockQueries.filter((q) => q.engine === activeTab.toLowerCase())
 
   return (
     <PageTransition className="p-6 lg:p-8">
-      <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-white">Query History</h1>
-        <span className="text-text-muted text-xs">· {ws.name}</span>
-      </div>
+      <h1 className="text-2xl font-bold text-white mb-6">Query History</h1>
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
@@ -116,14 +60,6 @@ export default function History() {
         ))}
       </div>
 
-      {/* Empty state */}
-      {filtered.length === 0 && (
-        <div className="text-center py-16">
-          <MessageSquare className="text-text-muted mx-auto mb-4" size={40} />
-          <p className="text-text-muted text-lg">No query history yet. Start a conversation in Chat.</p>
-        </div>
-      )}
-
       {/* Query list */}
       <div className="flex flex-col gap-3">
         {filtered.map((q) => (
@@ -133,14 +69,17 @@ export default function History() {
               onClick={() => setExpandedId(expandedId === q.id ? null : q.id)}
             >
               <div className="flex-1 min-w-0 mr-4">
-                <p className="text-white text-sm font-medium truncate">{q.query}</p>
+                <p className="text-white text-sm font-medium truncate">{q.text}</p>
                 <div className="flex items-center gap-3 mt-2">
-                  <EngineBadge engine={q.engine_used} />
-                  <span className="text-text-muted text-xs">{timeAgo(q.timestamp)}</span>
-                  <span className="text-text-muted text-xs">· {q.chatTitle}</span>
+                  <EngineBadge engine={q.engine} />
+                  <span className="text-text-muted text-xs">{q.time}</span>
+                  <span className="text-text-muted text-xs">· {q.source}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <PillButton variant="ghost" className="text-xs px-3 py-1.5">
+                  <RotateCw size={12} /> Re-run
+                </PillButton>
                 <ChevronDown
                   size={16}
                   className={cn('text-text-muted transition-transform', expandedId === q.id && 'rotate-180')}
@@ -158,12 +97,9 @@ export default function History() {
                   className="overflow-hidden"
                 >
                   <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.06)]">
-                    <p className="text-text-muted text-sm leading-relaxed whitespace-pre-line">{q.answer}</p>
+                    <p className="text-text-muted text-sm leading-relaxed">{q.answer}</p>
                     <button
-                      onClick={() => {
-                        setActiveChatSession(q.chatId)
-                        navigate('/dashboard/chat')
-                      }}
+                      onClick={() => navigate('/dashboard/chat')}
                       className="inline-flex items-center gap-2 text-accent-cyan text-sm mt-3 hover:underline"
                     >
                       <MessageSquare size={14} /> Open in Chat →

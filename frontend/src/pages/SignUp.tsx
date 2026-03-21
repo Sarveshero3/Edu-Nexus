@@ -1,13 +1,14 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Sparkles, ArrowRight, UserPlus, Eye, EyeOff } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Sparkles, FileText, Cpu, Target } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useAuth } from '@/stores/authStore'
 import PageTransition from '@/components/common/PageTransition'
-import BlurFade from '@/components/magicui/BlurFade'
-import AnimatedGradientText from '@/components/magicui/AnimatedGradientText'
+import PillButton from '@/components/common/PillButton'
+import GlassCard from '@/components/common/GlassCard'
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -18,28 +19,20 @@ const schema = z.object({
   message: 'Passwords do not match',
   path: ['confirmPassword'],
 })
+
 type FormData = z.infer<typeof schema>
 
-const inputClass = "w-full bg-white/[0.10] border border-white/[0.15] rounded-xl px-4 py-3.5 text-white text-base font-medium outline-none focus:border-cyan-500/60 focus:bg-white/[0.12] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/40 backdrop-blur-sm"
+const stats = [
+  { icon: FileText, value: '1,024+', label: 'documents indexed' },
+  { icon: Cpu, value: '3', label: 'retrieval engines' },
+  { icon: Target, value: '99.2%', label: 'query accuracy' },
+]
 
 export default function SignUp() {
   const navigate = useNavigate()
   const signUp = useAuth((s) => s.signUp)
   const isLoading = useAuth((s) => s.isLoading)
   const [showPassword, setShowPassword] = useState(false)
-
-  const cardRef = useRef<HTMLDivElement>(null)
-  const [glowPos, setGlowPos] = useState({ x: 50, y: 50 })
-  const [isHovering, setIsHovering] = useState(false)
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!cardRef.current) return
-    const rect = cardRef.current.getBoundingClientRect()
-    setGlowPos({
-      x: ((e.clientX - rect.left) / rect.width) * 100,
-      y: ((e.clientY - rect.top) / rect.height) * 100,
-    })
-  }, [])
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -51,111 +44,98 @@ export default function SignUp() {
   }
 
   return (
-    <PageTransition className="h-screen flex items-center justify-center px-6">
-      <BlurFade delay={0.1} inView={false}>
-        <div
-          ref={cardRef}
-          onMouseMove={handleMouseMove}
-          onMouseEnter={() => setIsHovering(true)}
-          onMouseLeave={() => setIsHovering(false)}
-          className="relative w-full max-w-2xl rounded-3xl border border-white/[0.14] bg-white/[0.07] backdrop-blur-2xl px-14 py-10 shadow-2xl shadow-black/30 overflow-hidden transition-all duration-500 hover:shadow-purple-500/15 hover:border-white/[0.22]"
-        >
-          <div
-            className="pointer-events-none absolute inset-0 rounded-3xl transition-opacity duration-300"
-            style={{
-              background: `radial-gradient(600px circle at ${glowPos.x}% ${glowPos.y}%, rgba(139,92,246,0.15), rgba(34,211,238,0.08) 40%, transparent 70%)`,
-              opacity: isHovering ? 1 : 0,
-            }}
-          />
+    <PageTransition className="min-h-screen flex">
+      {/* Left Panel */}
+      <div className="w-full lg:w-1/2 bg-bg-primary flex flex-col justify-center px-8 lg:px-16 py-12">
+        <Link to="/" className="flex items-center gap-2 mb-12">
+          <Sparkles className="text-accent-cyan" size={24} />
+          <span className="text-white font-bold text-xl">Edu Nexus</span>
+        </Link>
 
-          <div className="relative z-10">
-            {/* Header row — logo + title side by side */}
-            <div className="flex items-start justify-between mb-6">
-              <div>
-                <Link to="/" className="inline-flex items-center gap-2.5 mb-4 group">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center shadow-lg shadow-cyan-500/25">
-                    <Sparkles className="text-white" size={20} />
-                  </div>
-                  <span
-                    className="text-white font-bold text-lg tracking-tight group-hover:text-cyan-300 transition-colors"
-                    style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-                  >
-                    Edu Nexus
-                  </span>
-                </Link>
-                <h1
-                  className="text-3xl font-extrabold text-white leading-tight"
-                  style={{
-                    fontFamily: "'Space Grotesk', sans-serif",
-                    textShadow: '0 4px 24px rgba(0,0,0,0.6)',
-                  }}
-                >
-                  Start your{' '}
-                  <AnimatedGradientText colorFrom="#22d3ee" colorVia="#a78bfa" colorTo="#22d3ee" speed={0.8} className="font-extrabold">
-                    journey
-                  </AnimatedGradientText>
-                </h1>
-                <p className="text-white/80 text-sm mt-1 font-medium" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
-                  Create your Edu Nexus account.
-                </p>
-              </div>
-            </div>
+        <h1 className="text-3xl md:text-4xl font-bold text-white mb-2">Start your academic journey</h1>
+        <p className="text-text-muted mb-8">Create your Edu Nexus account.</p>
 
-            {/* 2×2 grid — no scroll */}
-            <form onSubmit={handleSubmit(onSubmit)}>
-              <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                <div>
-                  <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Full Name</label>
-                  <input {...register('name')} placeholder="John Doe" className={inputClass} />
-                  {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>}
-                </div>
-                <div>
-                  <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">University Email</label>
-                  <input {...register('email')} placeholder="you@university.edu" className={inputClass} />
-                  {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email.message}</p>}
-                </div>
-                <div className="relative">
-                  <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Password</label>
-                  <input
-                    {...register('password')}
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Min 8 characters"
-                    className={`${inputClass} pr-11`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-[38px] text-white/50 hover:text-white/80 transition-colors"
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                  {errors.password && <p className="text-red-400 text-xs mt-1">{errors.password.message}</p>}
-                </div>
-                <div>
-                  <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Confirm Password</label>
-                  <input {...register('confirmPassword')} type="password" placeholder="••••••••" className={inputClass} />
-                  {errors.confirmPassword && <p className="text-red-400 text-xs mt-1">{errors.confirmPassword.message}</p>}
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="group relative w-full flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold text-base shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed mt-5"
-              >
-                <UserPlus size={18} />
-                {isLoading ? 'Creating account...' : 'Create Account'}
-                <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-              </button>
-            </form>
-
-            <p className="text-white/60 text-sm mt-4 font-medium">
-              Already have an account?{' '}
-              <Link to="/sign-in" className="text-cyan-400 hover:text-cyan-300 font-bold transition-colors">Sign in</Link>
-            </p>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 max-w-md">
+          <div>
+            <input {...register('name')} placeholder="Full name" className="input-field" />
+            {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>}
           </div>
+          <div>
+            <input {...register('email')} placeholder="University email" className="input-field" />
+            {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email.message}</p>}
+          </div>
+          <div className="relative">
+            <input
+              {...register('password')}
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password"
+              className="input-field pr-16"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted text-xs hover:text-white"
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+            {errors.password && <p className="text-red-400 text-xs mt-1">{errors.password.message}</p>}
+          </div>
+          <div>
+            <input
+              {...register('confirmPassword')}
+              type="password"
+              placeholder="Confirm password"
+              className="input-field"
+            />
+            {errors.confirmPassword && <p className="text-red-400 text-xs mt-1">{errors.confirmPassword.message}</p>}
+          </div>
+
+          <PillButton type="submit" fullWidth disabled={isLoading}>
+            {isLoading ? 'Creating account...' : 'Create Account →'}
+          </PillButton>
+        </form>
+
+        <p className="text-text-muted text-sm mt-6">
+          Already have an account?{' '}
+          <Link to="/sign-in" className="text-accent-cyan hover:underline">Sign in</Link>
+        </p>
+      </div>
+
+      {/* Right Panel */}
+      <div className="hidden lg:flex w-1/2 bg-bg-app flex-col items-center justify-center px-12 relative overflow-hidden">
+        {/* Gradient orb */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full bg-gradient-to-br from-accent-cyan/20 to-accent-purple/20 blur-[80px]" />
+
+        <div className="relative z-10 flex flex-col gap-5 mb-12">
+          {stats.map((s, i) => (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 + i * 0.15 }}
+              className="animate-float"
+              style={{ animationDelay: `${i * 0.5}s` }}
+            >
+              <GlassCard className="px-6 py-5 flex items-center gap-4">
+                <s.icon className="text-accent-cyan" size={24} />
+                <div>
+                  <p className="text-white font-bold text-lg">{s.value}</p>
+                  <p className="text-text-muted text-sm">{s.label}</p>
+                </div>
+              </GlassCard>
+            </motion.div>
+          ))}
         </div>
-      </BlurFade>
+
+        <GlassCard hover={false} className="relative z-10 px-6 py-5 max-w-sm">
+          <p className="text-text-muted text-sm italic leading-relaxed">
+            "Edu Nexus transformed how I approach literature reviews. The tri-hybrid search
+            finds connections I would have missed entirely."
+          </p>
+          <p className="text-white text-sm font-semibold mt-3">Dr. Priya Sharma</p>
+          <p className="text-text-muted text-xs">Stanford University</p>
+        </GlassCard>
+      </div>
     </PageTransition>
   )
 }

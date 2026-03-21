@@ -2,15 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Animated gradient text — seamless right-to-left loop */
-@keyframes gradient {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 100% 50%; }
-}
-.animate-gradient {
-  animation: gradient 8s linear infinite;
-}
-
 :root {
   --bg-primary: #B8CEDE;
   --bg-app: #0F1624;

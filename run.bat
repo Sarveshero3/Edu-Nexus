@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
 REM  Edu Nexus — Launch Servers
-REM  Starts the FastAPI backend and Next.js frontend.
+REM  Starts the FastAPI backend and Vite frontend.
 REM  Run setup.bat first if you haven't installed dependencies.
 REM ============================================================
 
@@ -20,5 +20,5 @@ echo.
 REM ------ Start FastAPI Backend ------
 start "Edu Nexus Backend" cmd /k "cd /d %~dp0 && call venv\Scripts\activate.bat && uvicorn server:app --host 0.0.0.0 --port 8000 --reload"
 
-REM ------ Start Next.js Frontend ------
+REM ------ Start Vite Frontend ------
 start "Edu Nexus Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"

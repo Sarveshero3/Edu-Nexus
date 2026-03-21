@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTheme } from '@/stores/themeStore'
 import PageTransition from '@/components/common/PageTransition'
+import GlassCard from '@/components/common/GlassCard'
 import PillButton from '@/components/common/PillButton'
 import { cn } from '@/lib/utils'
 
@@ -12,12 +13,23 @@ const accents = [
   { id: 'teal', color: '#2DD4BF' },
 ] as const
 
-const tabs = ['General', 'Appearance'] as const
+const tabs = ['General', 'AI Engine', 'Appearance'] as const
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<string>('General')
   const { theme, accentColor, setTheme, setAccent } = useTheme()
+  const [bm25, setBm25] = useState(40)
+  const [faiss, setFaiss] = useState(40)
+  const [neo4j, setNeo4j] = useState(20)
+  const [mode, setMode] = useState('Auto')
   const [saved, setSaved] = useState(false)
+
+  const adjustWeights = (target: string, val: number) => {
+    const diff = val - (target === 'bm25' ? bm25 : target === 'faiss' ? faiss : neo4j)
+    if (target === 'bm25') { setBm25(val); setFaiss(Math.max(0, faiss - diff / 2)); setNeo4j(Math.max(0, neo4j - diff / 2)) }
+    else if (target === 'faiss') { setFaiss(val); setBm25(Math.max(0, bm25 - diff / 2)); setNeo4j(Math.max(0, neo4j - diff / 2)) }
+    else { setNeo4j(val); setBm25(Math.max(0, bm25 - diff / 2)); setFaiss(Math.max(0, faiss - diff / 2)) }
+  }
 
   const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000) }
 
@@ -48,11 +60,33 @@ export default function Settings() {
             <label className="text-text-muted text-xs block mb-1.5">Account Email</label>
             <p className="text-white text-sm">user@university.edu</p>
           </div>
-          <div className="mt-4 p-4 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
-            <p className="text-text-muted text-sm">
-              <span className="text-accent-cyan font-semibold">AI Engine:</span> The orchestrator automatically selects the optimal retrieval strategy (BM25, FAISS, Neo4j, or hybrid) for each query. No manual configuration needed.
-            </p>
+        </div>
+      )}
+
+      {activeTab === 'AI Engine' && (
+        <div className="flex flex-col gap-6">
+          {[{ label: 'BM25 Weight', val: bm25, key: 'bm25', color: '#5BC8F5' },
+            { label: 'FAISS Weight', val: faiss, key: 'faiss', color: '#A78BFA' },
+            { label: 'Neo4j Weight', val: neo4j, key: 'neo4j', color: '#7C3AED' }].map((s) => (
+            <div key={s.key}>
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-text-muted">{s.label}</span>
+                <span className="text-white font-medium">{Math.round(s.val)}</span>
+              </div>
+              <input type="range" min={0} max={100} value={s.val}
+                onChange={(e) => adjustWeights(s.key, Number(e.target.value))}
+                className="w-full accent-accent-cyan" style={{ accentColor: s.color }} />
+            </div>
+          ))}
+          <div>
+            <label className="text-text-muted text-xs block mb-1.5">Default Retrieval Mode</label>
+            <select value={mode} onChange={(e) => setMode(e.target.value)} className="input-field text-sm w-full max-w-xs">
+              <option>Auto</option><option>Fast</option><option>Semantic</option><option>Deep</option>
+            </select>
           </div>
+          <GlassCard hover={false} className="p-4">
+            <p className="text-text-muted text-sm">Current config: <span className="text-white">{Math.round(bm25)}% BM25 · {Math.round(faiss)}% FAISS · {Math.round(neo4j)}% Neo4j</span></p>
+          </GlassCard>
         </div>
       )}
 

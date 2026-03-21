@@ -97,6 +97,7 @@ class GraphBuilder:
                 rel_type = rel.get("type", "RELATED_TO")
                 properties = rel.get("properties", {})
                 
+
                 if not source or not target:
                     continue
                 

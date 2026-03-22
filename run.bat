@@ -14,11 +14,12 @@ echo   Backend API:  http://localhost:8000
 echo   Frontend UI:  http://localhost:5173
 echo   API Docs:     http://localhost:8000/docs
 echo.
-echo   NEW ENDPOINTS:
-echo     POST /api/sources/upload-batch  (parallel file upload)
-echo     GET  /api/status/refresh        (re-check engines)
-echo     GET  /api/suggestions           (AI question ideas)
-echo     GET  /api/sources/{name}/file   (raw file for PDF viewer)
+echo   FEATURES:
+echo     - LLM fallback chain (Groq models + NVIDIA API)
+echo     - Workspace-scoped chat + single-doc smart citations
+echo     - Graph Explorer with auto-zoom + fit-to-view
+echo     - Resizable viewer panels (drag handle)
+echo     - Workspace color tags in sidebar
 echo.
 echo   Close the server windows or press Ctrl+C to stop.
 echo ============================================================

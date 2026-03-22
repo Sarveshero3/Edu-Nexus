@@ -358,6 +358,8 @@ async def serve_source_file(name: str):
 
 class ChatRequest(BaseModel):
     query: str
+    source_filter: list[str] | None = None  # restrict to workspace docs
+    single_doc: bool = False  # True = no citations in response
 
 
 @app.post("/api/chat")
@@ -372,7 +374,11 @@ async def chat(request: ChatRequest):
         fail("Query cannot be empty")
 
     try:
-        response = await manager.generate_answer(query)
+        response = await manager.generate_answer(
+            query,
+            source_filter=request.source_filter,
+            single_doc=request.single_doc,
+        )
     except Exception as e:
         logger.error(f"[chat] Failed: {str(e)}", extra={
             "endpoint": "POST /api/chat",

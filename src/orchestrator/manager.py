@@ -106,14 +106,31 @@ ANSWER_PROMPT = (
     'to answer this."\n'
     "- NEVER hallucinate facts, names, dates, or relationships.\n\n"
     "── FORMAT ──\n"
-    "- Use Markdown for readability.\n"
-    "- Be concise, detailed, and academic in tone.\n"
+    "- Use clean Markdown for readability.\n"
+    "- Use ## headers for major sections.\n"
+    "- Use **bold** for key terms and concepts.\n"
+    "- Use bullet points (- ) for lists of items.\n"
+    "- Use numbered lists (1. ) for sequential steps or processes.\n"
+    "- Be concise yet thorough. Write in a conversational but academic tone.\n"
     "- Cite the source document for each claim using the format "
     "[Source: document_name] where document_name is the filename "
     "shown in the context block headers.\n"
     "- If a context section is labeled with a document name, use that "
     "name in your citation. Do NOT use generic labels like "
     "'Chunk 1' or 'Semantic Chunk'.\n"
+)
+
+# ── Single-doc prompt (no citations needed, saves tokens) ────────────
+ANSWER_PROMPT_SINGLE_DOC = (
+    "You are **Edu Nexus**, an elite academic assistant.\n\n"
+    "The user is viewing a SINGLE document and asking about it. "
+    "All context comes from that one document — do NOT cite sources, "
+    "do NOT add [Source: ...] tags. Just answer directly.\n\n"
+    "── RULES ──\n"
+    "- Answer using ONLY the context provided. No prior knowledge.\n"
+    "- NEVER hallucinate facts.\n"
+    "- Use clean Markdown: ## headers, **bold** key terms, bullet points.\n"
+    "- Be concise yet thorough. Conversational but academic.\n"
 )
 
 
@@ -658,6 +675,17 @@ class OrchestratorManager:
             "across file", "across document",
         ]
         return any(marker in q for marker in multi_markers)
+
+    # ================================================================== #
+    #  SOURCE GUESSING (for workspace filtering)                           #
+    # ================================================================== #
+
+    @staticmethod
+    def _guess_chunk_source(chunk: str) -> str:
+        """Extract the source filename from a chunk's [Source: …] tag."""
+        import re as _re
+        m = _re.search(r"\[Source:\s*(.+?)\]", chunk)
+        return m.group(1).strip() if m else ""
 
     # ================================================================== #
     #  STRATEGY (human-readable label)                                    #

@@ -47,17 +47,29 @@ data/artifacts/*
 *.swo
 *~
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints
+# ── Jupyter ──
+.ipynb_checkpoints/
 
-.agent/*
+# ── Agent context (private) ──
+.agent/
 .agent
 
-# Next.js Frontend
+# ── Frontend ──
 frontend/node_modules/
+frontend/dist/
 frontend/.next/
 frontend/out/
 frontend/next-env.d.ts
 
-# Chainlit (legacy)
+# ── Chainlit (legacy) ──
 .chainlit/
+
+# ── OS files ──
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ── Misc ──
+*.log
+*.bak
+skills-lock.json

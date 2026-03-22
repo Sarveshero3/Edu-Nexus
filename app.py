@@ -15,8 +15,10 @@ On startup the UI declares the health of every retrieval engine.
 
 import chainlit as cl
 from src.orchestrator.manager import OrchestratorManager
+from src.ingest.extractor import SUPPORTED_EXTENSIONS as _EXT_SET
 
-SUPPORTED_EXTENSIONS = {"pdf", "docx", "txt", "md"}
+# Chainlit uses extensions without the leading dot
+SUPPORTED_EXTENSIONS = {ext.lstrip(".") for ext in _EXT_SET}
 BOT_AUTHOR = "Edu Nexus"
 
 
@@ -68,7 +70,7 @@ async def on_chat_start():
             "- **Fast Brain (BM25)** — Keyword matching across your documents\n"
             "- **Deep Brain (Neo4j)** — Traverses a knowledge graph of entities & relationships\n"
             "- **Semantic Brain (FAISS)** — Dense vector similarity search\n\n"
-            "**Upload a file** (PDF, DOCX, TXT, MD) to build the knowledge base, "
+            "**Upload a file** (PDF, DOCX, PPTX, XLSX, CSV, TXT, MD) to build the knowledge base, "
             "then ask me anything about it.\n\n"
             "---\n"
             "*Tip: Watch the reasoning steps below each answer to see "

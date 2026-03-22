@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import requests
 import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -32,6 +33,8 @@ from src.retrieval.bm25_index import KeywordEngine
 from src.graph_engine.neo4j_ops import Neo4jConnector
 from src.graph_engine.builder import GraphBuilder
 from src.vector_engine.store import VectorStore
+from src.ingest.extractor import extract_text
+from src.ingest.extractor import SUPPORTED_EXTENSIONS as _EXTRACTOR_EXTENSIONS
 
 load_dotenv()
 
@@ -46,15 +49,22 @@ logger = logging.getLogger("Orchestrator")
 RAW_DIR = Path("data/raw")
 PROCESSED_DIR = Path("data/processed")
 ARTIFACTS_DIR = Path("data/artifacts")
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+SUPPORTED_EXTENSIONS = _EXTRACTOR_EXTENSIONS  # single source of truth from extractor
 
 # ── LLM config ────────────────────────────────────────────────────────
-ROUTER_MODEL = "openai/gpt-oss-120b"               # Decides strategy
-ANSWER_MODEL = "moonshotai/kimi-k2-instruct-0905"   # Generates answer
+# Ordered fallback lists — if first model is rate-limited, try next
+ROUTER_MODELS = ["openai/gpt-oss-120b", "qwen/qwen3-32b"]
+ANSWER_MODELS = ["moonshotai/kimi-k2-instruct-0905", "qwen/qwen3-32b"]
+
+# NVIDIA API fallback (final resort when all Groq models are rate-limited)
+NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+NVIDIA_MODEL = "qwen/qwen3.5-122b-a10b"
+
 BM25_TOP_K = 3
 VECTOR_TOP_K = 3
 GRAPH_RESULT_LIMIT = 8
-MAX_CHUNK_WORDS = 200
+MAX_CHUNK_WORDS = 400
 MAX_CONTEXT_CHARS = 18000
 
 # ── Router System Prompt ──────────────────────────────────────────────
@@ -96,10 +106,31 @@ ANSWER_PROMPT = (
     'to answer this."\n'
     "- NEVER hallucinate facts, names, dates, or relationships.\n\n"
     "── FORMAT ──\n"
-    "- Use Markdown for readability.\n"
-    "- Be concise, detailed, and academic in tone.\n"
-    "- Cite which retrieval source supported each claim "
-    "(e.g., [Graph], [Keyword Chunk 2], [Semantic Chunk 1]).\n"
+    "- Use clean Markdown for readability.\n"
+    "- Use ## headers for major sections.\n"
+    "- Use **bold** for key terms and concepts.\n"
+    "- Use bullet points (- ) for lists of items.\n"
+    "- Use numbered lists (1. ) for sequential steps or processes.\n"
+    "- Be concise yet thorough. Write in a conversational but academic tone.\n"
+    "- Cite the source document for each claim using the format "
+    "[Source: document_name] where document_name is the filename "
+    "shown in the context block headers.\n"
+    "- If a context section is labeled with a document name, use that "
+    "name in your citation. Do NOT use generic labels like "
+    "'Chunk 1' or 'Semantic Chunk'.\n"
+)
+
+# ── Single-doc prompt (no citations needed, saves tokens) ────────────
+ANSWER_PROMPT_SINGLE_DOC = (
+    "You are **Edu Nexus**, an elite academic assistant.\n\n"
+    "The user is viewing a SINGLE document and asking about it. "
+    "All context comes from that one document — do NOT cite sources, "
+    "do NOT add [Source: ...] tags. Just answer directly.\n\n"
+    "── RULES ──\n"
+    "- Answer using ONLY the context provided. No prior knowledge.\n"
+    "- NEVER hallucinate facts.\n"
+    "- Use clean Markdown: ## headers, **bold** key terms, bullet points.\n"
+    "- Be concise yet thorough. Conversational but academic.\n"
 )
 
 
@@ -165,6 +196,9 @@ class OrchestratorManager:
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
         ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
 
+        # ── File registry (tracks all ingested documents) ─────────────
+        self._ingested_files: List[str] = []
+
         # ── 1. Fast Brain (BM25) ──────────────────────────────────────
         self.keyword_engine = KeywordEngine()
         try:
@@ -209,6 +243,76 @@ class OrchestratorManager:
             raise ValueError("GROQ_API_KEY not set in environment.")
         self.llm = Groq(api_key=api_key)
 
+    # ------------------------------------------------------------------ #
+    #  LLM call with automatic fallback                                   #
+    # ------------------------------------------------------------------ #
+
+    async def _llm_call_with_fallback(
+        self,
+        models: List[str],
+        messages: List[Dict],
+        temperature: float = 0.3,
+        max_tokens: int = 512,
+    ) -> str:
+        """
+        Try each Groq model in order. If all fail (rate limit, error),
+        fall back to the NVIDIA API as last resort.
+        Returns the raw response text.
+        """
+        last_error = None
+
+        for model in models:
+            try:
+                completion = await asyncio.to_thread(
+                    lambda m=model: self.llm.chat.completions.create(
+                        model=m,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        stream=False,
+                    )
+                )
+                text = completion.choices[0].message.content or ""
+                logger.info(f"LLM call succeeded with model: {model}")
+                return text.strip()
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Model {model} failed ({e}), trying next...")
+                continue
+
+        # NVIDIA API fallback
+        try:
+            logger.info("All Groq models failed. Falling back to NVIDIA API...")
+            payload = {
+                "model": NVIDIA_MODEL,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "top_p": 0.95,
+                "stream": False,
+                "chat_template_kwargs": {"enable_thinking": False},
+            }
+            headers = {
+                "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                "Accept": "application/json",
+            }
+            resp = await asyncio.to_thread(
+                lambda: requests.post(
+                    NVIDIA_API_URL, headers=headers, json=payload, timeout=60
+                )
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            text = data["choices"][0]["message"]["content"] or ""
+            logger.info(f"NVIDIA API fallback succeeded with {NVIDIA_MODEL}")
+            return text.strip()
+        except Exception as nvidia_err:
+            logger.error(f"NVIDIA API fallback also failed: {nvidia_err}")
+
+        raise RuntimeError(
+            f"All LLM models failed. Last Groq error: {last_error}"
+        )
+
     # ================================================================== #
     #  LLM ROUTER — decides which brain(s) to invoke                     #
     # ================================================================== #
@@ -244,20 +348,15 @@ class OrchestratorManager:
         )
 
         try:
-            completion = await asyncio.to_thread(
-                lambda: self.llm.chat.completions.create(
-                    model=ROUTER_MODEL,
-                    messages=[
-                        {"role": "system", "content": ROUTER_PROMPT},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    temperature=0,
-                    max_tokens=200,
-                    stream=False,
-                )
+            raw = await self._llm_call_with_fallback(
+                models=ROUTER_MODELS,
+                messages=[
+                    {"role": "system", "content": ROUTER_PROMPT},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0,
+                max_tokens=200,
             )
-            raw = completion.choices[0].message.content or ""
-            raw = raw.strip()
             logger.info(f"Router LLM raw response: {raw}")
 
             # Parse JSON — handle multiple formats the model might return
@@ -337,12 +436,26 @@ class OrchestratorManager:
     #  RETRIEVAL — one method per brain                                   #
     # ================================================================== #
 
+    @property
+    def _multi_file(self) -> bool:
+        """True when more than one document has been ingested."""
+        return len(self._ingested_files) > 1
+
     def _retrieve_bm25(self, query: str) -> List[str]:
-        """Fast Brain: top-k keyword-matched chunks."""
+        """Fast Brain: keyword-matched chunks.
+        Uses per-file retrieval when multiple files are ingested so
+        every document is represented (the detective's Ctrl+F runs
+        across ALL case files, not just the top-scoring one).
+        """
         if not self._bm25_ready:
             return []
         try:
-            results = self.keyword_engine.search(query, k=BM25_TOP_K)
+            if self._multi_file:
+                results = self.keyword_engine.search_per_file(
+                    query, k_per_file=BM25_TOP_K
+                )
+            else:
+                results = self.keyword_engine.search(query, k=BM25_TOP_K)
             logger.info(f"Fast Brain returned {len(results)} chunks.")
             return results
         except Exception as e:
@@ -350,7 +463,9 @@ class OrchestratorManager:
             return []
 
     def _retrieve_graph(self, query: str) -> List[Dict]:
-        """Deep Brain: knowledge-graph triples matching query keywords."""
+        """Deep Brain: knowledge-graph triples matching query keywords.
+        The detective's string board — connects entities across ALL files.
+        """
         if not self._graph_ready:
             return []
 
@@ -373,11 +488,14 @@ class OrchestratorManager:
             for i in range(len(keywords))
         )
 
+        # Increase limit when multiple files exist
+        limit = GRAPH_RESULT_LIMIT * 2 if self._multi_file else GRAPH_RESULT_LIMIT
+
         cypher = (
             f"MATCH (a)-[r]->(b) "
             f"WHERE {where_clauses} "
             f"RETURN a.name AS source, type(r) AS relation, b.name AS target "
-            f"LIMIT {GRAPH_RESULT_LIMIT}"
+            f"LIMIT {limit}"
         )
         params = {f"kw{i}": kw for i, kw in enumerate(keywords)}
 
@@ -390,11 +508,20 @@ class OrchestratorManager:
             return []
 
     def _retrieve_vector(self, query: str) -> List[Tuple[str, float]]:
-        """Semantic Brain: top-k dense-vector similar chunks."""
+        """Semantic Brain: dense-vector similar chunks.
+        Uses per-file retrieval when multiple files are ingested so
+        every document is represented (the detective reads diaries
+        from ALL suspects, not just the most talkative one).
+        """
         if not self._vector_ready:
             return []
         try:
-            results = self.vector_store.search(query, k=VECTOR_TOP_K)
+            if self._multi_file:
+                results = self.vector_store.search_per_file(
+                    query, k_per_file=VECTOR_TOP_K
+                )
+            else:
+                results = self.vector_store.search(query, k=VECTOR_TOP_K)
             logger.info(f"Semantic Brain returned {len(results)} chunks.")
             return results
         except Exception as e:
@@ -413,13 +540,15 @@ class OrchestratorManager:
             return text
         return " ".join(words[:max_words]) + " ..."
 
-    @staticmethod
-    def _format_keyword_context(chunks: List[str]) -> str:
+    def _format_keyword_context(self, chunks: List[str]) -> str:
         if not chunks:
             return "_No keyword chunks retrieved._"
         lines = []
         for i, chunk in enumerate(chunks, 1):
-            lines.append(f"**[Keyword Chunk {i}]**\n{OrchestratorManager._truncate(chunk)}")
+            # Try to identify which document this chunk came from
+            doc_name = self._guess_chunk_source(chunk)
+            label = f"[Source: {doc_name}]" if doc_name else f"[Keyword Result {i}]"
+            lines.append(f"**{label}**\n{OrchestratorManager._truncate(chunk)}")
         return "\n\n".join(lines)
 
     @staticmethod
@@ -434,16 +563,37 @@ class OrchestratorManager:
             lines.append(f"- **{src}** -> _{rel}_ -> **{tgt}**")
         return "\n".join(lines)
 
-    @staticmethod
-    def _format_semantic_context(results: List[Tuple[str, float]]) -> str:
+    def _format_semantic_context(self, results: List[Tuple[str, float]]) -> str:
         if not results:
             return "_No semantic chunks retrieved._"
         lines = []
         for i, (chunk, score) in enumerate(results, 1):
+            doc_name = self._guess_chunk_source(chunk)
+            label = f"[Source: {doc_name}]" if doc_name else f"[Semantic Result {i}]"
             lines.append(
-                f"**[Semantic Chunk {i}]** (score: {score:.4f})\n{OrchestratorManager._truncate(chunk)}"
+                f"**{label}** (relevance: {score:.2f})\n{OrchestratorManager._truncate(chunk)}"
             )
         return "\n\n".join(lines)
+
+    def _guess_chunk_source(self, chunk_text: str) -> Optional[str]:
+        """Try to match a chunk to its source document by checking JSONL files."""
+        snippet = chunk_text[:80]
+        for fname in self._ingested_files:
+            jsonl = PROCESSED_DIR / f"{Path(fname).stem}.chunks.jsonl"
+            if jsonl.exists():
+                try:
+                    with open(jsonl, "r", encoding="utf-8") as f:
+                        for line in f:
+                            data = json.loads(line.strip())
+                            text = data.get("text", data.get("chunk", ""))
+                            if snippet in text:
+                                return fname
+                except Exception:
+                    pass
+        # Fallback: return first file if only one exists
+        if len(self._ingested_files) == 1:
+            return self._ingested_files[0]
+        return None
 
     def _build_context_block(
         self,
@@ -454,6 +604,18 @@ class OrchestratorManager:
     ) -> str:
         """Fuse retrieval outputs into a single context_block."""
         sections = []
+
+        # ── File inventory (tells the LLM which documents are loaded) ─
+        if self._ingested_files:
+            file_list = "\n".join(
+                f"  {i}. {name}" for i, name in enumerate(self._ingested_files, 1)
+            )
+            sections.append(
+                f"## [Document Inventory]\n\n"
+                f"The following {len(self._ingested_files)} file(s) have been "
+                f"uploaded and indexed:\n{file_list}\n\n"
+                f"All retrieval results below come from these documents."
+            )
 
         if "keyword" in chosen_brains:
             keyword_ctx = self._format_keyword_context(bm25_chunks)
@@ -486,6 +648,46 @@ class OrchestratorManager:
         return block
 
     # ================================================================== #
+    #  MULTI-FILE QUERY DETECTION                                          #
+    # ================================================================== #
+
+    @staticmethod
+    def _is_multi_file_query(query: str) -> bool:
+        """
+        Detect whether the user's query is about multiple / all uploaded files.
+
+        Triggers on patterns like:
+          - "summarize both files"
+          - "compare the documents"
+          - "tell me about all files"
+          - "what do these files say"
+          - "overview of everything"
+        """
+        q = query.lower()
+        multi_markers = [
+            "both file", "all file", "all document", "every file",
+            "every document", "each file", "each document",
+            "these file", "these document", "the files", "the documents",
+            "compare", "contrast", "differences between",
+            "similarities between", "overview of everything",
+            "summarize everything", "summarise everything",
+            "all of them", "both of them",
+            "across file", "across document",
+        ]
+        return any(marker in q for marker in multi_markers)
+
+    # ================================================================== #
+    #  SOURCE GUESSING (for workspace filtering)                           #
+    # ================================================================== #
+
+    @staticmethod
+    def _guess_chunk_source(chunk: str) -> str:
+        """Extract the source filename from a chunk's [Source: …] tag."""
+        import re as _re
+        m = _re.search(r"\[Source:\s*(.+?)\]", chunk)
+        return m.group(1).strip() if m else ""
+
+    # ================================================================== #
     #  STRATEGY (human-readable label)                                    #
     # ================================================================== #
 
@@ -504,7 +706,12 @@ class OrchestratorManager:
     #  MAIN ANSWER PIPELINE                                               #
     # ================================================================== #
 
-    async def generate_answer(self, query: str) -> dict:
+    async def generate_answer(
+        self,
+        query: str,
+        source_filter: Optional[List[str]] = None,
+        single_doc: bool = False,
+    ) -> dict:
         """
         LLM-Routed Tri-Hybrid RAG pipeline:
 
@@ -513,6 +720,11 @@ class OrchestratorManager:
           3. Results are fused into a ``context_block``.
           4. Answer LLM synthesises the final answer.
           5. Return a structured dict.
+
+        Parameters
+        ----------
+        source_filter : list of filenames to restrict retrieval to
+        single_doc : if True, use the shorter prompt (no citations)
 
         Returns
         -------
@@ -529,6 +741,25 @@ class OrchestratorManager:
         router_decision = await self._route_query(query)
         chosen_brains = router_decision["brains"]
         routing_reasoning = router_decision["reasoning"]
+
+        # If multiple files AND a broad/meta query, force all brains
+        # so every file gets covered from every angle
+        if self._multi_file and self._is_multi_file_query(query):
+            available = []
+            if self._bm25_ready:
+                available.append("keyword")
+            if self._graph_ready:
+                available.append("graph")
+            if self._vector_ready:
+                available.append("semantic")
+            chosen_brains = available
+            routing_reasoning += (
+                " [Override: multi-file query detected — "
+                "using all available brains for full coverage.]"
+            )
+            router_decision["brains"] = chosen_brains
+            router_decision["reasoning"] = routing_reasoning
+
         logger.info(f"Router chose: {chosen_brains} — {routing_reasoning}")
 
         # ── Step 2: Run ONLY chosen brains concurrently ───────────────
@@ -551,6 +782,17 @@ class OrchestratorManager:
         graph_triples = results.get("graph", [])
         vector_results = results.get("vector", [])
 
+        # ── Step 2.5: Filter by source if workspace-scoped ────────────
+        if source_filter:
+            bm25_chunks = [
+                c for c in bm25_chunks
+                if self._guess_chunk_source(c) in source_filter
+            ]
+            vector_results = [
+                (c, s) for c, s in vector_results
+                if self._guess_chunk_source(c) in source_filter
+            ]
+
         # ── Step 3: Build context block ───────────────────────────────
         context_block = self._build_context_block(
             bm25_chunks, graph_triples, vector_results, chosen_brains
@@ -565,8 +807,10 @@ class OrchestratorManager:
                 "Please upload a document first using the attachment button."
             )
         else:
+            # Choose prompt based on single_doc flag
+            prompt = ANSWER_PROMPT_SINGLE_DOC if single_doc else ANSWER_PROMPT
             messages = [
-                {"role": "system", "content": ANSWER_PROMPT},
+                {"role": "system", "content": prompt},
                 {
                     "role": "user",
                     "content": (
@@ -576,16 +820,12 @@ class OrchestratorManager:
                 },
             ]
             try:
-                completion = await asyncio.to_thread(
-                    lambda: self.llm.chat.completions.create(
-                        model=ANSWER_MODEL,
-                        messages=messages,
-                        temperature=0.3,
-                        max_tokens=512,
-                        stream=False,
-                    )
+                answer_text = await self._llm_call_with_fallback(
+                    models=ANSWER_MODELS,
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=1024,
                 )
-                answer_text = completion.choices[0].message.content.strip()
             except Exception as e:
                 logger.error(f"LLM generation failed: {e}")
                 answer_text = (
@@ -637,6 +877,10 @@ class OrchestratorManager:
             shutil.copy2(file_path, dest)
             logger.info(f"Saved uploaded file to {dest}")
 
+            # Track in file registry
+            if file_name not in self._ingested_files:
+                self._ingested_files.append(file_name)
+
             # Run ingestion (clean + chunk)
             chunks_count, chunk_texts = await asyncio.to_thread(
                 self._run_ingestion, dest
@@ -681,7 +925,7 @@ class OrchestratorManager:
 
     @staticmethod
     def _run_ingestion(file_path: Path) -> Tuple[int, List[str]]:
-        """Run the cleaner + chunker on a single file.
+        """Run the unified extractor + cleaner + chunker on a single file.
         Returns (chunk_count, list_of_chunk_texts).
         """
         cleaner_path = Path(__file__).parent.parent / "ingest" / "cleaner.py"
@@ -689,28 +933,10 @@ class OrchestratorManager:
         cleaner = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cleaner)
 
-        ext = file_path.suffix.lower()
-
-        if ext == ".pdf":
-            pages = cleaner.extract_text_from_pdf(file_path)
-        elif ext == ".docx":
-            from docx import Document
-            doc = Document(file_path)
-            paragraphs = []
-            for p in doc.paragraphs:
-                if p.text and p.text.strip():
-                    paragraphs.append(p.text.strip())
-            for table in doc.tables:
-                for row in table.rows:
-                    cells = [
-                        c.text.strip() for c in row.cells if c.text.strip()
-                    ]
-                    if cells:
-                        paragraphs.append(" | ".join(cells))
-            pages = ["\n".join(paragraphs)]
-        elif ext in (".txt", ".md"):
-            pages = [file_path.read_text(encoding="utf-8", errors="ignore")]
-        else:
+        # ── Unified extraction (supports PDF, DOCX, PPTX, XLSX, CSV, TXT, MD)
+        pages = extract_text(file_path)
+        if not pages:
+            logger.warning(f"No text extracted from {file_path.name}")
             return 0, []
 
         cleaned_text = cleaner.clean_pages(pages, source_type="pdf")

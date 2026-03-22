@@ -6,6 +6,7 @@ from typing import List
 import importlib.util
 
 from tqdm import tqdm
+from src.ingest.extractor import extract_text, SUPPORTED_EXTENSIONS
 
 # logging
 logging.basicConfig(
@@ -25,33 +26,16 @@ def import_cleaner_module():
     return cleaner
 
 
-# -------------------- DOCX extraction --------------------
-
+# -------------------- DOCX extraction (delegated to extractor) --------------------
+# Kept for backward compat; new code should use extractor.extract_text()
 def extract_text_from_docx(path: Path) -> List[str]:
-    from docx import Document
-
-    doc = Document(path)
-    paragraphs = []
-
-    for p in doc.paragraphs:
-        if p.text and p.text.strip():
-            paragraphs.append(p.text.strip())
-
-    # extract tables as text
-    for table in doc.tables:
-        for row in table.rows:
-            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-            if cells:
-                paragraphs.append(" | ".join(cells))
-
-    text = "\n".join(paragraphs)
-    return [text]
+    return extract_text(path)
 
 
 # -------------------- file discovery --------------------
 
 def discover_files(raw_dir: Path) -> List[Path]:
-    patterns = ("*.pdf", "*.docx", "*.txt", "*.md")
+    patterns = tuple(f"*{ext}" for ext in SUPPORTED_EXTENSIONS)
     files = []
     for pat in patterns:
         files.extend(raw_dir.rglob(pat))
@@ -70,21 +54,14 @@ def process_file(
 ):
     ext = file_path.suffix.lower()
 
-    # -------- extract --------
-    if ext == ".pdf":
-        pages = cleaner.extract_text_from_pdf(file_path, use_ocr=use_ocr)
-        source_type = "pdf"
-
-    elif ext == ".docx":
-        pages = extract_text_from_docx(file_path)
-        source_type = "docx"
-
-    elif ext in (".txt", ".md"):
-        pages = [file_path.read_text(encoding="utf-8", errors="ignore")]
-        source_type = "pdf"
-
-    else:
+    # -------- extract via unified extractor --------
+    if ext not in SUPPORTED_EXTENSIONS:
         return {"file": str(file_path), "status": "skipped"}
+
+    pages = extract_text(file_path)
+    if not pages:
+        return {"file": str(file_path), "status": "skipped"}
+    source_type = ext.lstrip(".")
 
     # -------- clean --------
     cleaned_text = cleaner.clean_pages(pages, source_type=source_type)

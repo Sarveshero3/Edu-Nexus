@@ -1,49 +1,51 @@
 @echo off
 REM ============================================================
-REM  Edu Nexus — Quick Start Guide
-REM  Run this from the project root:
-REM    c:\Users\Sarvesh\Desktop\MinorProject\Edu-Nexus\
+REM  Edu Nexus Ultimate — Launch Servers
+REM  Starts the FastAPI backend (port 8000) and Vite frontend (port 5173).
+REM  Run setup.bat first if you haven't installed dependencies.
 REM ============================================================
 
 echo.
 echo ============================================================
-echo   Edu Nexus — Setup ^& Launch
+echo   Edu Nexus Ultimate — Starting Servers
+echo ============================================================
+echo.
+echo   Backend API:  http://localhost:8000
+echo   Frontend UI:  http://localhost:5173
+echo   API Docs:     http://localhost:8000/docs
+echo.
+echo   FEATURES:
+echo     - LLM fallback chain (Groq models + NVIDIA API)
+echo     - Workspace-scoped chat + single-doc smart citations
+echo     - Graph Explorer with auto-zoom + fit-to-view
+echo     - Resizable viewer panels (drag handle)
+echo     - Workspace color tags in sidebar
+echo.
+echo   Close the server windows or press Ctrl+C to stop.
 echo ============================================================
 echo.
 
-REM ------ Step 1: Create virtual environment (skip if exists) ------
-IF NOT EXIST "venv" (
-    echo [1/4] Creating virtual environment...
-    python -m venv venv
-    echo       Done.
-) ELSE (
-    echo [1/4] Virtual environment already exists, skipping creation.
+REM ------ Check .env exists ------
+IF NOT EXIST ".env" (
+    echo [WARNING] No .env file found! Run setup.bat first.
+    echo           The backend needs GROQ_API_KEY to start.
+    pause
+    exit /b 1
 )
 
-REM ------ Step 2: Activate virtual environment ------
-echo [2/4] Activating virtual environment...
-call venv\Scripts\activate.bat
+REM ------ Start FastAPI Backend ------
+start "Edu Nexus Backend" cmd /k "cd /d %~dp0 && call venv\Scripts\activate.bat && python server.py"
 
-REM ------ Step 3: Install / update dependencies ------
-echo [3/4] Installing dependencies from requirements.txt...
-pip install -r requirements.txt
+REM ------ Wait a moment for backend to initialize ------
+echo   Waiting 4 seconds for backend to initialize...
+timeout /t 4 /nobreak > nul
 
-REM ------ Step 4: Copy logo to avatars directory ------
-echo [3.5/4] Setting up avatar...
-IF NOT EXIST ".chainlit\public\avatars" (
-    mkdir ".chainlit\public\avatars"
-)
-copy /Y "logo.png" ".chainlit\public\avatars\edu nexus.png" >nul 2>&1
-echo       Avatar setup complete.
+REM ------ Start Vite Frontend ------
+start "Edu Nexus Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
 
-REM ------ Step 5: Launch Chainlit ------
-echo [4/4] Starting Edu Nexus...
+echo   Both servers are starting...
+echo   Backend window: "Edu Nexus Backend"
+echo   Frontend window: "Edu Nexus Frontend"
 echo.
-echo ============================================================
-echo   Open your browser at:  http://localhost:8000
-echo   Press Ctrl+C to stop the server.
-echo ============================================================
+echo   Open http://localhost:5173 in your browser.
 echo.
-chainlit run app.py
-
-pause

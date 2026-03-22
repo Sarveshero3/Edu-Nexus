@@ -4,6 +4,9 @@ Vector Store — Edu Nexus (Semantic Brain)
 FAISS-backed vector store using sentence-transformers for dense
 semantic retrieval.  Mirrors the KeywordEngine API so the
 Orchestrator can treat every brain identically.
+
+Supports **file-aware retrieval**: each chunk carries its source
+filename so the search can guarantee cross-file coverage.
 """
 
 from __future__ import annotations
@@ -11,8 +14,9 @@ from __future__ import annotations
 import json
 import logging
 import pickle
+from collections import defaultdict
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -67,6 +71,8 @@ class VectorStore:
     2. ``load_index()``   — loads a previously built index from disk.
     3. ``search(query)``  — returns the top-k most semantically similar
        chunks for the given query string.
+    4. ``search_per_file(query)`` — returns top-k per source file for
+       cross-file coverage.
     """
 
     def __init__(
@@ -84,6 +90,7 @@ class VectorStore:
         self._model = None          # lazy-loaded SentenceTransformer
         self.index = None           # FAISS index object
         self.chunks: List[str] = []
+        self.sources: List[str] = []   # source filename per chunk
 
     # ------------------------------------------------------------------ #
     #  Model                                                              #
@@ -113,15 +120,27 @@ class VectorStore:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _load_chunks(processed_dir: str = "data/processed") -> List[str]:
-        """Read all ``*.chunks.jsonl`` files and return a flat list of texts."""
+    def _load_chunks_with_sources(
+        processed_dir: str = "data/processed",
+    ) -> Tuple[List[str], List[str]]:
+        """Read all ``*.chunks.jsonl`` files and return texts + source filenames."""
         proc = Path(processed_dir)
         texts: List[str] = []
+        sources: List[str] = []
         for file in sorted(proc.glob("*.chunks.jsonl")):
             with open(file, "r", encoding="utf-8") as fh:
                 for line in fh:
                     data = json.loads(line)
                     texts.append(data["text"])
+                    # Extract just the filename from the source path
+                    source_path = data.get("source", "unknown")
+                    sources.append(Path(source_path).name)
+        return texts, sources
+
+    @staticmethod
+    def _load_chunks(processed_dir: str = "data/processed") -> List[str]:
+        """Read all ``*.chunks.jsonl`` files and return a flat list of texts."""
+        texts, _ = VectorStore._load_chunks_with_sources(processed_dir)
         return texts
 
     # ------------------------------------------------------------------ #
@@ -132,7 +151,7 @@ class VectorStore:
         """Embed every chunk and persist a FAISS index + metadata."""
         faiss = _ensure_faiss()
 
-        self.chunks = self._load_chunks()
+        self.chunks, self.sources = self._load_chunks_with_sources()
         logger.info(f"Loaded {len(self.chunks)} chunks for vector index.")
 
         if not self.chunks:
@@ -150,14 +169,16 @@ class VectorStore:
         self.index = faiss.IndexFlatIP(dim)
         self.index.add(embeddings)
 
-        # Persist
+        # Persist (now includes sources)
         faiss.write_index(self.index, str(self.index_path))
         with open(self.meta_path, "wb") as f:
-            pickle.dump({"chunks": self.chunks}, f)
+            pickle.dump({"chunks": self.chunks, "sources": self.sources}, f)
 
+        unique_files = set(self.sources)
         logger.info(
             f"FAISS index built and saved  "
-            f"({len(self.chunks)} vectors, dim={dim})."
+            f"({len(self.chunks)} vectors, dim={dim}, "
+            f"{len(unique_files)} source files)."
         )
 
     def load_index(self) -> None:
@@ -175,10 +196,19 @@ class VectorStore:
         with open(self.meta_path, "rb") as f:
             meta = pickle.load(f)
         self.chunks = meta["chunks"]
+        self.sources = meta.get("sources", ["unknown"] * len(self.chunks))
 
         logger.info(
             f"FAISS index loaded ({self.index.ntotal} vectors)."
         )
+
+    # ------------------------------------------------------------------ #
+    #  Source-file helpers                                                 #
+    # ------------------------------------------------------------------ #
+
+    def get_source_files(self) -> List[str]:
+        """Return unique source filenames in the index."""
+        return sorted(set(self.sources)) if self.sources else []
 
     # ------------------------------------------------------------------ #
     #  Search                                                             #
@@ -204,3 +234,44 @@ class VectorStore:
                 continue
             results.append((self.chunks[idx], float(score)))
         return results
+
+    def search_per_file(
+        self, query: str, k_per_file: int = 3
+    ) -> List[Tuple[str, float]]:
+        """
+        File-aware search: returns top-*k_per_file* chunks **per source file**.
+
+        This guarantees every ingested file is represented in the results,
+        which is critical for multi-document queries like
+        "summarize both files" or "compare all documents".
+
+        Returns
+        -------
+        list of (chunk_text, similarity_score) tuples, sorted descending.
+        """
+        if self.index is None:
+            raise ValueError("Vector index not loaded. Call load_index() first.")
+
+        # Search broadly — fetch enough to cover all files
+        n_files = len(set(self.sources)) if self.sources else 1
+        fetch_k = min(k_per_file * n_files * 3, self.index.ntotal)
+
+        query_vec = self._embed([query])
+        scores, indices = self.index.search(query_vec, fetch_k)
+
+        # Bucket results by source file
+        per_file: Dict[str, List[Tuple[str, float]]] = defaultdict(list)
+        for score, idx in zip(scores[0], indices[0]):
+            if idx == -1:
+                continue
+            source = self.sources[idx] if idx < len(self.sources) else "unknown"
+            if len(per_file[source]) < k_per_file:
+                per_file[source].append((self.chunks[idx], float(score)))
+
+        # Merge all per-file results, sorted by score
+        merged: List[Tuple[str, float]] = []
+        for file_results in per_file.values():
+            merged.extend(file_results)
+        merged.sort(key=lambda x: x[1], reverse=True)
+
+        return merged

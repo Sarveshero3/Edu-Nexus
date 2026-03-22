@@ -1,129 +1,129 @@
-# Edu Nexus: Detailed Project Structure 📂
+# Edu Nexus: Project Structure 📂
 
-This document provides a deep dive (DFS) into the **exact** file and folder hierarchy of the **Edu Nexus** project. 
-*(Note: standard generated directories like `node_modules`, `venv`, `.git`, and `__pycache__` are excluded for clarity).*
+Full directory tree of the **Edu Nexus** project.
+*(Excludes `node_modules`, `venv`, `.git`, `__pycache__`, `dist`)*
 
 ```text
 Edu-Nexus/
-├── data/                       # Core Data Storage & Databases
-│   ├── artifacts/              # Contains FAISS metadata, indexes, and serialized BM25 pickles
-│   ├── processed/              # Extracted text chunks (.jsonl) and standardized text files
-│   └── raw/                    # User-uploaded PDFs, DOCX, and raw input files
-├── docs/                       # Internal documentation and system design references
+├── .agents/                        # Agent context & workflows
+│   └── workflows/
+│       ├── lessons.md              # Coding rules from past mistakes
+│       ├── memory.md               # Session memory & progress tracking
+│       └── primer.md               # Project architecture primer
+├── data/                           # Core Data Storage
+│   ├── artifacts/                  # FAISS index, BM25 pickle (disk-persisted)
+│   ├── processed/                  # Extracted text chunks (.chunks.jsonl)
+│   └── raw/                        # User-uploaded original files
+├── docs/                           # Internal documentation
 │   └── data_naming_convention.md
-├── frontend/                   # UI Assets corresponding to Next/React updates
+├── frontend/                       # Vite + React 18 + TypeScript SPA
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── common/
-│   │   │   │   ├── EngineBadge.tsx
-│   │   │   │   ├── GlassCard.tsx
-│   │   │   │   ├── PageTransition.tsx
-│   │   │   │   └── PillButton.tsx
+│   │   │   │   ├── EngineBadge.tsx      # Color-coded engine label
+│   │   │   │   ├── GlassCard.tsx        # Glassmorphism card with hover glow
+│   │   │   │   ├── PageTransition.tsx   # Framer Motion page wrapper
+│   │   │   │   ├── PillButton.tsx       # Gradient pill CTA button
+│   │   │   │   └── SplineScene.tsx      # Spline 3D WebGL background
 │   │   │   ├── guards/
-│   │   │   │   └── AuthGuard.tsx
-│   │   │   └── layout/
-│   │   │       ├── AppShell.tsx
-│   │   │       ├── PublicNavbar.tsx
-│   │   │       └── Sidebar.tsx
+│   │   │   │   └── AuthGuard.tsx        # Route guard → redirect if not authed
+│   │   │   ├── layout/
+│   │   │   │   ├── AppShell.tsx         # Dashboard shell (sidebar + content)
+│   │   │   │   ├── PublicLayout.tsx     # Shared Spline background for public pages
+│   │   │   │   ├── PublicNavbar.tsx     # Public page top navbar
+│   │   │   │   └── Sidebar.tsx          # Dashboard nav + workspace switcher
+│   │   │   └── magicui/
+│   │   │       ├── AnimatedGradientText.tsx  # Shimmer gradient text
+│   │   │       └── BlurFade.tsx              # Bidirectional scroll fade+blur
 │   │   ├── lib/
-│   │   │   └── utils.ts
+│   │   │   ├── api.ts               # Typed Axios client (14 endpoints)
+│   │   │   └── utils.ts             # cn() utility
 │   │   ├── pages/
 │   │   │   ├── dashboard/
-│   │   │   │   ├── Chat.tsx
-│   │   │   │   ├── Graph.tsx
-│   │   │   │   ├── History.tsx
-│   │   │   │   ├── Search.tsx
-│   │   │   │   ├── Sources.tsx
-│   │   │   │   └── Viewer.tsx
-│   │   │   ├── Docs.tsx
-│   │   │   ├── ForgotPassword.tsx
-│   │   │   ├── Home.tsx
-│   │   │   ├── NotFound.tsx
-│   │   │   ├── Onboarding.tsx
-│   │   │   ├── Profile.tsx
-│   │   │   ├── Settings.tsx
-│   │   │   ├── SignIn.tsx
-│   │   │   └── SignUp.tsx
+│   │   │   │   ├── Chat.tsx          # RAG chat with chain-of-thought
+│   │   │   │   ├── Graph.tsx         # Neo4j Aura–style graph (4 layouts)
+│   │   │   │   ├── History.tsx       # Query history with engine tabs
+│   │   │   │   ├── Search.tsx        # Cross-engine search
+│   │   │   │   ├── Sources.tsx       # Document upload/list/delete
+│   │   │   │   └── Viewer.tsx        # Document chunk viewer + side chat
+│   │   │   ├── Docs.tsx              # Documentation page
+│   │   │   ├── ForgotPassword.tsx    # Password reset (glass card)
+│   │   │   ├── Home.tsx              # Landing page with scroll animations
+│   │   │   ├── NotFound.tsx          # 404 page
+│   │   │   ├── Onboarding.tsx        # 3-step animated tutorial
+│   │   │   ├── Profile.tsx           # User profile
+│   │   │   ├── Settings.tsx          # Engine weight tuning
+│   │   │   ├── SignIn.tsx            # Sign in (glass card)
+│   │   │   └── SignUp.tsx            # Sign up (glass card, 2×2 grid)
 │   │   ├── stores/
-│   │   │   ├── authStore.ts
-│   │   │   ├── sidebarStore.ts
-│   │   │   └── themeStore.ts
-│   │   ├── App.tsx
-│   │   ├── index.css
-│   │   ├── main.tsx
-│   │   └── vite-env.d.ts
-│   ├── index.html
-│   ├── package-lock.json
+│   │   │   ├── authStore.ts          # Auth state (mock)
+│   │   │   ├── sidebarStore.ts       # Sidebar collapse
+│   │   │   ├── themeStore.ts         # Theme preferences
+│   │   │   └── workspaceStore.ts     # Workspaces, sources, chats, messages
+│   │   ├── App.tsx                   # Root app with routing
+│   │   ├── index.css                 # Global styles + animations
+│   │   ├── main.tsx                  # React entry point
+│   │   └── vite-env.d.ts            # Vite type declarations
+│   ├── index.html                    # HTML entry (loads Spline viewer)
 │   ├── package.json
 │   ├── postcss.config.js
 │   ├── tailwind.config.ts
 │   ├── tsconfig.json
 │   └── vite.config.ts
-├── notebooks/                  # Sandboxed Jupyter Notebooks for experimentation
+├── notebooks/                        # Jupyter notebooks (experimentation)
 │   ├── 01_scan_files.ipynb
 │   ├── 02_text_to_docx.ipynb
 │   ├── 03_ppt_to_docx.ipynb
 │   ├── 04_pdf_to_docx.ipynb
 │   └── 05_deepseek_ocr.ipynb
-├── prompts/                    # LLM System Prompts used across engines
+├── prompts/                          # LLM system prompts
 │   └── .gitkeep
-├── src/                        # Main Application Source Code
-│   ├── graph_engine/           # Knowledge Graph Logic Subsystem
+├── src/                              # Python Backend Source
+│   ├── graph_engine/                 # Knowledge Graph Pipeline
 │   │   ├── __init__.py
-│   │   ├── builder.py          
-│   │   ├── extractor.py        
-│   │   ├── generation_log.md   
-│   │   └── neo4j_ops.py        
-│   ├── ingest/                 # Document Loading & Cleaning Subsystem
+│   │   ├── builder.py                # Graph construction orchestrator
+│   │   ├── extractor.py              # Entity/relationship extraction via LLM
+│   │   └── neo4j_ops.py              # Neo4j CRUD (MERGE, read, delete)
+│   ├── ingest/                       # Document Ingestion Pipeline
 │   │   ├── __init__.py
-│   │   ├── cleaner.py          
-│   │   ├── extractor.py        
-│   │   ├── ocr.py              
-│   │   └── processor.py        
-│   ├── orchestrator/           # Central Hub Logic
+│   │   ├── cleaner.py                # Regex noise removal
+│   │   ├── extractor.py              # Multi-format text extraction
+│   │   ├── ocr.py                    # OCR fallback for scanned PDFs
+│   │   └── processor.py              # Raw file → clean text conversion
+│   ├── orchestrator/                 # Central Intelligence Router
 │   │   ├── __init__.py
-│   │   └── manager.py          
-│   ├── pipeline/               # Full workflow glue linking all systems
-│   │   ├── build_index.py
-│   │   └── run_pipeline.py     
-│   ├── retrieval/              # Pure Lexical Keyword Logic
+│   │   └── manager.py                # Query routing, fusion, answer generation
+│   ├── pipeline/                     # End-to-end Ingestion Glue
+│   │   ├── build_index.py            # Batch index rebuilder
+│   │   └── run_pipeline.py           # Full ingestion: extract → chunk → embed → index
+│   ├── retrieval/                    # Keyword Retrieval
 │   │   ├── __init__.py
-│   │   ├── bm25_index.py       
-│   │   └── search.py           
-│   ├── splitter/               # Document Chunking Logic 
-│   │   └── textSplitter.py     
-│   └── vector_engine/          # Vector Semantic Brain Logic
+│   │   ├── bm25_index.py             # Okapi BM25 index
+│   │   └── search.py                 # Search utilities
+│   ├── splitter/                     # Text Chunking
+│   │   └── textSplitter.py           # 500-char chunks with overlap
+│   └── vector_engine/                # Vector Semantic Search
 │       ├── __init__.py
-│       ├── store.py            
-│       └── vector.py           
-├── tests/                      # Testing frameworks covering ingestion & engine functionality
+│       ├── store.py                  # FAISS index management
+│       └── vector.py                 # Vector utilities
+├── tests/                            # Test data & frameworks
 │   └── Sample_data/
 │       ├── raw/
 │       │   ├── images/
-│       │   │   ├── DSA2.png
-│       │   │   └── Syllabus for DSA.png
 │       │   ├── pdf/
-│       │   │   ├── UltimateJavaCheatSheet.pdf
-│       │   │   └── Unit-1 DS.pdf
 │       │   └── ppt/
-│       │       ├── Session18(linkedlist(Intro).pptx
-│       │       └── Session19(Singlylinkedlist).pptx
 │       └── README.md
-├── .env                        # [SECRET] API Keys (Groq, Neo4j, Gemini) 
-├── .env.example                # [PUBLIC] Template for API keys
-├── .gitignore                  # Files to exclude from Git
-├── Features_To_Add.txt
-├── HOW_TO_RUN.txt
+├── .env.example                      # Template for API keys
+├── .gitignore
 ├── LICENSE
-├── MODULE_DETAILS.md           
-├── PROJECT_STRUCTURE.md        # This Structure Document
-├── README.md                   
-├── app.py                      # Core runtime for UI Interface
-├── config.py                   # Centralized configuration constants and API keys maps
-├── generation_log.md           
-├── logo.png
-├── requirements.txt            # Python environment packages
-├── run.bat
-├── server.py
-└── setup.bat
+├── MODULE_DETAILS.md                 # Functional module map
+├── PROJECT_STRUCTURE.md              # This file
+├── README.md                         # Project readme
+├── app.py                            # Legacy Chainlit entry point
+├── config.py                         # Centralized configuration
+├── logo.png                          # Project logo
+├── requirements.txt                  # Python dependencies
+├── run.bat                           # Start backend + frontend
+├── server.py                         # FastAPI REST API (14 endpoints)
+└── setup.bat                         # One-time environment setup
 ```

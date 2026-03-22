@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Plus, FileText, Upload, X, CheckCircle, AlertCircle, Loader2, Trash2, FolderPlus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -39,12 +39,21 @@ export default function Sources() {
   const activeWs = useWorkspace((s) => s.getActiveWorkspace())
   const addSourceToWorkspace = useWorkspace((s) => s.addSourceToWorkspace)
   const removeSourceFromWorkspace = useWorkspace((s) => s.removeSourceFromWorkspace)
+  const syncSourceNames = useWorkspace((s) => s.syncSourceNames)
 
   // Fetch all sources from backend
   const { data: allSources = [], isLoading, error } = useQuery({
     queryKey: ['sources'],
     queryFn: getSources,
   })
+
+  // Sync workspace sourceNames with backend on every fetch
+  useEffect(() => {
+    if (allSources.length >= 0 && !isLoading) {
+      const backendNames = allSources.map((s: Source) => s.name)
+      syncSourceNames(backendNames)
+    }
+  }, [allSources, isLoading, syncSourceNames])
 
   // Filter to show only workspace sources (or all if no workspace)
   const workspaceSources = activeWorkspaceId && activeWs

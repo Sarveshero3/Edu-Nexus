@@ -1,57 +1,120 @@
-# Module Details: A Developer's Onboarding Map 🗺️
+# Module Details: Developer's Onboarding Map 🗺️
 
-Welcome to **Edu Nexus**. This document is designed to give you an immediate functional understanding of the most *critical* components defining our Tri-Hybrid GraphRAG Engine. It abstracts away boilerplate to focus purely on "**What file does what**" and "**Where it fits**" in the bigger picture.
+A functional guide to every critical component in the **Edu Nexus** Tri-Hybrid GraphRAG Engine.
 
 ---
 
-## 🚀 The Entry Point (The Orchestrator)
+## 🚀 Entry Points
 
-### `app.py`
-**The Front Door.** This is the main entry point to the application instance locally. It boots up the Chainlit UI, instantiates the underlying engines, ingests incoming files dropping them to the pipeline, and prints the "Glass Box" (showing exactly which retrieval strategy is at play: Vector, Graph, or Keyword).
+### `server.py`
+**The API Gateway.** A FastAPI application exposing 14 REST endpoints and 1 WebSocket. Handles CORS, file uploads, chat queries, graph data, search, history, and engine settings. Delegates all heavy logic to the orchestrator.
+
+### `config.py`
+**Configuration Hub.** Centralizes paths (`data/raw`, `data/processed`, `data/artifacts`), embedding model names, and runtime constants.
+
+---
+
+## 🧠 The Orchestrator
 
 ### `src/orchestrator/manager.py`
-**The Core Brain.** While `app.py` is the UI, the `manager.py` is the actual intelligence router. 
-- **Role:** It actively queries the Lexical BM25, the Neo4j Knowledge Graph, and FAISS Vector engines. It fuses the returned information, verifies it contextually, and prompts a local LLM to deliver the final zero-hallucination semantic answer for the user.
+**The Intelligence Router.** The core brain that:
+- Routes queries to the appropriate retrieval engine(s) via Groq LLM
+- Fuses results from BM25, FAISS, and Neo4j
+- Builds context blocks and generates final grounded answers
+- Manages the full document ingestion pipeline (extract → chunk → embed → index → graph)
 
 ---
 
-## 🧠 The Tri-Hybrid Search Brains
+## 🔍 The Tri-Hybrid Search Brains
 
-Edu Nexus is powerful because it uses *three* concurrent search methodologies. These are mapped below:
+### 1. Graph Engine — `src/graph_engine/`
+Discovers entity relationships using Groq LLM and stores them as a knowledge graph in Neo4j.
+- **`extractor.py`** — Identifies entities (nodes) and relationships (edges) from document text
+- **`builder.py`** — Calls the extractor and orchestrates graph construction
+- **`neo4j_ops.py`** — CRUD operations against Neo4j (`MERGE` deduplication, reads, deletes)
 
-### 1. The Deep Brain (Graph Engine)
-*Location: `src/graph_engine/`*
-This pipeline discovers relationships using the Groq `openai/gpt-oss-120b` LLM and stores them as Knowledge Graphs in Neo4j.
-- **`extractor.py`**: The heavy lifter identifying precise "Entities" (Nodes) and semantic "Relationships" (Edges) from document text. 
-- **`neo4j_ops.py` / `builder.py`**: Pushes the extracted structural mappings logically straight into the remote Neo4j databases (`MERGE` deduplication).
+### 2. Vector Engine — `src/vector_engine/`
+Captures semantic meaning via dense embeddings.
+- **`store.py`** — FAISS index creation, insertion, and similarity search using `all-MiniLM-L6-v2`
+- **`vector.py`** — Lower-level vector utilities
 
-### 2. The Semantic Brain (Vector Engine)
-*Location: `src/vector_engine/`*
-This engine captures the embedded contextual *meaning* behind chunks of text.
-- **`store.py`**: Creates semantic proximity layouts mapped into an offline FAISS local database using the standard `all-MiniLM-L6-v2` HuggingFace embeddings representation.
-
-### 3. The Fast Brain (Keyword Lexical Engine)
-*Location: `src/retrieval/`*
-When explicit exact match indexing matters over broad semantic meaning.
-- **`bm25_index.py`**: Analyzes the raw token sequences (Okapi BM25 algorithm), bypassing LLMs, ensuring critical terminology isn't missed by vector proximity models. 
+### 3. Keyword Engine — `src/retrieval/`
+Fast lexical matching for exact terminology.
+- **`bm25_index.py`** — Okapi BM25 index (build, search, serialize/deserialize)
+- **`search.py`** — Search utilities and result formatting
 
 ---
 
-## 🧹 The Ingestion Pipeline
+## 📥 Ingestion Pipeline
 
-To make retrieval efficient, raw incoming documents must be standardized. 
-*Location: `src/ingest/` & `src/splitter/`*
+### `src/ingest/`
+- **`extractor.py`** — Multi-format text extraction (PDF, DOCX, TXT, PPTX, XLSX, CSV, MD)
+- **`processor.py`** — Orchestrates raw file → clean text conversion
+- **`cleaner.py`** — Regex heuristics to strip headers, footers, and noise
+- **`ocr.py`** — OCR fallback for scanned PDFs
 
-- **`src/ingest/processor.py`**: Handles incoming raw PDFs or DOCX uploads and strips them into a uniform unstructured string. 
-- **`src/ingest/cleaner.py`**: Fires Regex heuristic functions rapidly resolving recurring noises (such as page headers/footers) prior to embedding.
-- **`src/splitter/textSplitter.py`**: Smarts-splits the cleaned master string into strict 500-character chunks to cap processing ceilings reliably. Ensures LLM context bounds are protected and fast.
+### `src/splitter/`
+- **`textSplitter.py`** — Splits cleaned text into 500-character chunks with overlap, respecting LLM context limits
+
+### `src/pipeline/`
+- **`run_pipeline.py`** — End-to-end ingestion: extract → clean → chunk → embed → index
+- **`build_index.py`** — Batch index rebuilding utility
 
 ---
 
-## 🗄️ Standardized Data Formats
+## 🖥️ Frontend — `frontend/`
 
-*Location: `data/`*
+A Vite + React 18 + TypeScript SPA with Tailwind CSS.
 
-- **`data/raw/`**: Where initial files start out (messy, PDFs, docs).
-- **`data/processed/`**: The pipeline transforms raw text directly into normalized local JSON structures (`.chunks.jsonl`).
-- **`data/artifacts/`**: Where our Brains (`bm25.pkl` lexicons & `faiss.index` semantical vectors) securely cache to disk so rebooting doesn't require rebuilding embeddings.
+### State Management — `stores/`
+| Store | Purpose |
+|-------|---------|
+| `authStore.ts` | Mock auth (sign in/up/out) with localStorage persistence |
+| `workspaceStore.ts` | Workspace CRUD, source assignments, chat sessions, messages |
+| `sidebarStore.ts` | Sidebar collapse state |
+| `themeStore.ts` | Theme preferences |
+
+### API Client — `lib/api.ts`
+Typed Axios client with automatic `{ success, data, error }` envelope unwrapping for all 14 backend endpoints.
+
+### Pages — `pages/`
+| Page | Route | Purpose |
+|------|-------|---------|
+| `Home.tsx` | `/` | Landing page with Spline 3D background, scroll animations |
+| `SignIn.tsx` | `/sign-in` | Glass card sign-in form |
+| `SignUp.tsx` | `/sign-up` | Glass card sign-up form (2×2 grid, no scroll) |
+| `ForgotPassword.tsx` | `/forgot-password` | Password reset form |
+| `Onboarding.tsx` | `/onboarding` | 3-step animated tutorial walkthrough |
+| `Sources.tsx` | `/dashboard/sources` | Upload, list, delete documents per workspace |
+| `Chat.tsx` | `/dashboard/chat` | RAG chat with chain-of-thought |
+| `Graph.tsx` | `/dashboard/graph` | Neo4j Aura–style graph (4 layouts: Force/Radial/Hierarchy/Grid) |
+| `History.tsx` | `/dashboard/history` | Query history with engine tabs |
+| `Search.tsx` | `/dashboard/search` | Cross-engine search |
+| `Viewer.tsx` | `/dashboard/viewer/:name` | Document chunk viewer with side chat |
+| `Settings.tsx` | `/settings` | Engine weight tuning |
+| `Profile.tsx` | `/profile` | User profile |
+
+### Components — `components/`
+| Component | Purpose |
+|-----------|---------|
+| `SplineScene.tsx` | Full-screen Spline 3D WebGL background |
+| `GlassCard.tsx` | Glassmorphism card with cursor-tracking hover glow |
+| `PillButton.tsx` | Gradient pill-shaped CTA button |
+| `EngineBadge.tsx` | Color-coded engine label (BM25/FAISS/Graph) |
+| `PageTransition.tsx` | Framer Motion page enter/exit wrapper |
+| `AnimatedGradientText.tsx` | Shimmer gradient text effect |
+| `BlurFade.tsx` | Bidirectional scroll-triggered fade+blur animation |
+| `PublicLayout.tsx` | Shared Spline background for public pages |
+| `AppShell.tsx` | Dashboard shell with sidebar and top bar |
+| `AuthGuard.tsx` | Route guard — redirects to `/` if not authenticated |
+| `Sidebar.tsx` | Dashboard navigation + workspace switcher |
+
+---
+
+## 🗄️ Data Storage — `data/`
+
+| Directory | Contents |
+|-----------|----------|
+| `data/raw/` | User-uploaded original files |
+| `data/processed/` | Extracted/cleaned text chunks (`.chunks.jsonl`) |
+| `data/artifacts/` | Serialized indices (`faiss.index`, `bm25.pkl`) |

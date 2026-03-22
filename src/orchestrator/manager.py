@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import requests
 import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -51,12 +52,19 @@ ARTIFACTS_DIR = Path("data/artifacts")
 SUPPORTED_EXTENSIONS = _EXTRACTOR_EXTENSIONS  # single source of truth from extractor
 
 # ── LLM config ────────────────────────────────────────────────────────
-ROUTER_MODEL = "openai/gpt-oss-120b"               # Decides strategy
-ANSWER_MODEL = "moonshotai/kimi-k2-instruct-0905"   # Generates answer
+# Ordered fallback lists — if first model is rate-limited, try next
+ROUTER_MODELS = ["openai/gpt-oss-120b", "qwen/qwen3-32b"]
+ANSWER_MODELS = ["moonshotai/kimi-k2-instruct-0905", "qwen/qwen3-32b"]
+
+# NVIDIA API fallback (final resort when all Groq models are rate-limited)
+NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+NVIDIA_MODEL = "qwen/qwen3.5-122b-a10b"
+
 BM25_TOP_K = 3
 VECTOR_TOP_K = 3
 GRAPH_RESULT_LIMIT = 8
-MAX_CHUNK_WORDS = 200
+MAX_CHUNK_WORDS = 400
 MAX_CONTEXT_CHARS = 18000
 
 # ── Router System Prompt ──────────────────────────────────────────────
@@ -98,14 +106,31 @@ ANSWER_PROMPT = (
     'to answer this."\n'
     "- NEVER hallucinate facts, names, dates, or relationships.\n\n"
     "── FORMAT ──\n"
-    "- Use Markdown for readability.\n"
-    "- Be concise, detailed, and academic in tone.\n"
+    "- Use clean Markdown for readability.\n"
+    "- Use ## headers for major sections.\n"
+    "- Use **bold** for key terms and concepts.\n"
+    "- Use bullet points (- ) for lists of items.\n"
+    "- Use numbered lists (1. ) for sequential steps or processes.\n"
+    "- Be concise yet thorough. Write in a conversational but academic tone.\n"
     "- Cite the source document for each claim using the format "
     "[Source: document_name] where document_name is the filename "
     "shown in the context block headers.\n"
     "- If a context section is labeled with a document name, use that "
     "name in your citation. Do NOT use generic labels like "
     "'Chunk 1' or 'Semantic Chunk'.\n"
+)
+
+# ── Single-doc prompt (no citations needed, saves tokens) ────────────
+ANSWER_PROMPT_SINGLE_DOC = (
+    "You are **Edu Nexus**, an elite academic assistant.\n\n"
+    "The user is viewing a SINGLE document and asking about it. "
+    "All context comes from that one document — do NOT cite sources, "
+    "do NOT add [Source: ...] tags. Just answer directly.\n\n"
+    "── RULES ──\n"
+    "- Answer using ONLY the context provided. No prior knowledge.\n"
+    "- NEVER hallucinate facts.\n"
+    "- Use clean Markdown: ## headers, **bold** key terms, bullet points.\n"
+    "- Be concise yet thorough. Conversational but academic.\n"
 )
 
 
@@ -218,6 +243,76 @@ class OrchestratorManager:
             raise ValueError("GROQ_API_KEY not set in environment.")
         self.llm = Groq(api_key=api_key)
 
+    # ------------------------------------------------------------------ #
+    #  LLM call with automatic fallback                                   #
+    # ------------------------------------------------------------------ #
+
+    async def _llm_call_with_fallback(
+        self,
+        models: List[str],
+        messages: List[Dict],
+        temperature: float = 0.3,
+        max_tokens: int = 512,
+    ) -> str:
+        """
+        Try each Groq model in order. If all fail (rate limit, error),
+        fall back to the NVIDIA API as last resort.
+        Returns the raw response text.
+        """
+        last_error = None
+
+        for model in models:
+            try:
+                completion = await asyncio.to_thread(
+                    lambda m=model: self.llm.chat.completions.create(
+                        model=m,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        stream=False,
+                    )
+                )
+                text = completion.choices[0].message.content or ""
+                logger.info(f"LLM call succeeded with model: {model}")
+                return text.strip()
+            except Exception as e:
+                last_error = e
+                logger.warning(f"Model {model} failed ({e}), trying next...")
+                continue
+
+        # NVIDIA API fallback
+        try:
+            logger.info("All Groq models failed. Falling back to NVIDIA API...")
+            payload = {
+                "model": NVIDIA_MODEL,
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "top_p": 0.95,
+                "stream": False,
+                "chat_template_kwargs": {"enable_thinking": False},
+            }
+            headers = {
+                "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                "Accept": "application/json",
+            }
+            resp = await asyncio.to_thread(
+                lambda: requests.post(
+                    NVIDIA_API_URL, headers=headers, json=payload, timeout=60
+                )
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            text = data["choices"][0]["message"]["content"] or ""
+            logger.info(f"NVIDIA API fallback succeeded with {NVIDIA_MODEL}")
+            return text.strip()
+        except Exception as nvidia_err:
+            logger.error(f"NVIDIA API fallback also failed: {nvidia_err}")
+
+        raise RuntimeError(
+            f"All LLM models failed. Last Groq error: {last_error}"
+        )
+
     # ================================================================== #
     #  LLM ROUTER — decides which brain(s) to invoke                     #
     # ================================================================== #
@@ -253,20 +348,15 @@ class OrchestratorManager:
         )
 
         try:
-            completion = await asyncio.to_thread(
-                lambda: self.llm.chat.completions.create(
-                    model=ROUTER_MODEL,
-                    messages=[
-                        {"role": "system", "content": ROUTER_PROMPT},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    temperature=0,
-                    max_tokens=200,
-                    stream=False,
-                )
+            raw = await self._llm_call_with_fallback(
+                models=ROUTER_MODELS,
+                messages=[
+                    {"role": "system", "content": ROUTER_PROMPT},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0,
+                max_tokens=200,
             )
-            raw = completion.choices[0].message.content or ""
-            raw = raw.strip()
             logger.info(f"Router LLM raw response: {raw}")
 
             # Parse JSON — handle multiple formats the model might return
@@ -587,6 +677,17 @@ class OrchestratorManager:
         return any(marker in q for marker in multi_markers)
 
     # ================================================================== #
+    #  SOURCE GUESSING (for workspace filtering)                           #
+    # ================================================================== #
+
+    @staticmethod
+    def _guess_chunk_source(chunk: str) -> str:
+        """Extract the source filename from a chunk's [Source: …] tag."""
+        import re as _re
+        m = _re.search(r"\[Source:\s*(.+?)\]", chunk)
+        return m.group(1).strip() if m else ""
+
+    # ================================================================== #
     #  STRATEGY (human-readable label)                                    #
     # ================================================================== #
 
@@ -605,7 +706,12 @@ class OrchestratorManager:
     #  MAIN ANSWER PIPELINE                                               #
     # ================================================================== #
 
-    async def generate_answer(self, query: str) -> dict:
+    async def generate_answer(
+        self,
+        query: str,
+        source_filter: Optional[List[str]] = None,
+        single_doc: bool = False,
+    ) -> dict:
         """
         LLM-Routed Tri-Hybrid RAG pipeline:
 
@@ -614,6 +720,11 @@ class OrchestratorManager:
           3. Results are fused into a ``context_block``.
           4. Answer LLM synthesises the final answer.
           5. Return a structured dict.
+
+        Parameters
+        ----------
+        source_filter : list of filenames to restrict retrieval to
+        single_doc : if True, use the shorter prompt (no citations)
 
         Returns
         -------
@@ -671,6 +782,17 @@ class OrchestratorManager:
         graph_triples = results.get("graph", [])
         vector_results = results.get("vector", [])
 
+        # ── Step 2.5: Filter by source if workspace-scoped ────────────
+        if source_filter:
+            bm25_chunks = [
+                c for c in bm25_chunks
+                if self._guess_chunk_source(c) in source_filter
+            ]
+            vector_results = [
+                (c, s) for c, s in vector_results
+                if self._guess_chunk_source(c) in source_filter
+            ]
+
         # ── Step 3: Build context block ───────────────────────────────
         context_block = self._build_context_block(
             bm25_chunks, graph_triples, vector_results, chosen_brains
@@ -685,8 +807,10 @@ class OrchestratorManager:
                 "Please upload a document first using the attachment button."
             )
         else:
+            # Choose prompt based on single_doc flag
+            prompt = ANSWER_PROMPT_SINGLE_DOC if single_doc else ANSWER_PROMPT
             messages = [
-                {"role": "system", "content": ANSWER_PROMPT},
+                {"role": "system", "content": prompt},
                 {
                     "role": "user",
                     "content": (
@@ -696,16 +820,12 @@ class OrchestratorManager:
                 },
             ]
             try:
-                completion = await asyncio.to_thread(
-                    lambda: self.llm.chat.completions.create(
-                        model=ANSWER_MODEL,
-                        messages=messages,
-                        temperature=0.3,
-                        max_tokens=512,
-                        stream=False,
-                    )
+                answer_text = await self._llm_call_with_fallback(
+                    models=ANSWER_MODELS,
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=1024,
                 )
-                answer_text = completion.choices[0].message.content.strip()
             except Exception as e:
                 logger.error(f"LLM generation failed: {e}")
                 answer_text = (

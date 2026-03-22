@@ -1,15 +1,16 @@
-# Byte-compiled / Optimized / DLL files
+# ── Python ──
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
 
-# Distribution / Packaging
+# ── Virtual Environments ──
 .Python
 env/
 venv/
+.venv/
+
+# ── Distribution / Packaging ──
 build/
 develop-eggs/
 dist/
@@ -26,11 +27,12 @@ wheels/
 .installed.cfg
 *.egg
 
-# Environment Variables (CRITICAL)
+# ── Environment Variables (CRITICAL) ──
 .env
 .env.local
+.env.*.local
 
-# Data storage (Don't commit data!)
+# ── Data Storage (don't commit user data) ──
 data/raw/*
 data/processed/*
 data/artifacts/*
@@ -38,21 +40,36 @@ data/artifacts/*
 !data/processed/.gitkeep
 !data/artifacts/.gitkeep
 
-# IDE Settings
+# ── IDE / Editor ──
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints
+# ── Jupyter ──
+.ipynb_checkpoints/
 
-.agent/*
+# ── Agent context (private) ──
+.agent/
 .agent
 
-# Next.js Frontend
+# ── Frontend ──
 frontend/node_modules/
+frontend/dist/
 frontend/.next/
 frontend/out/
 frontend/next-env.d.ts
 
-# Chainlit (legacy)
+# ── Chainlit (legacy) ──
 .chainlit/
+
+# ── OS files ──
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ── Misc ──
+*.log
+*.bak
+skills-lock.json

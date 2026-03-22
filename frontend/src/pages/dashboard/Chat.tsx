@@ -17,6 +17,7 @@ export default function Chat() {
   const addMessage = useWorkspace((s) => s.addMessage)
   const getChatMessages = useWorkspace((s) => s.getChatMessages)
   const getActiveChatSession = useWorkspace((s) => s.getActiveChatSession)
+  const getActiveWorkspace = useWorkspace((s) => s.getActiveWorkspace)
 
   const session = getActiveChatSession()
   const messages = activeWorkspaceId && activeChatSessionId
@@ -46,7 +47,11 @@ export default function Chat() {
   }, [messages])
 
   const chatMutation = useMutation({
-    mutationFn: sendChat,
+    mutationFn: (query: string) => {
+      const ws = getActiveWorkspace()
+      const sourceFilter = ws?.sourceNames.length ? ws.sourceNames : undefined
+      return sendChat(query, sourceFilter)
+    },
     onSuccess: (data: ChatResponse) => {
       if (!activeWorkspaceId || !activeChatSessionId) return
       const aiMsg: Message = {

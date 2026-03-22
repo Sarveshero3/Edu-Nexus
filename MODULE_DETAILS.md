@@ -1,173 +1,57 @@
-# Module Details & Technical Specifications
+# Module Details: A Developer's Onboarding Map 🗺️
 
-This document provides a comprehensive overview of all the files, folders, implemented modules, their processing logic, and the overall technology stack used in **Edu Nexus**.
+Welcome to **Edu Nexus**. This document is designed to give you an immediate functional understanding of the most *critical* components defining our Tri-Hybrid GraphRAG Engine. It abstracts away boilerplate to focus purely on "**What file does what**" and "**Where it fits**" in the bigger picture.
 
-## 📁 Root Directory Files
+---
+
+## 🚀 The Entry Point (The Orchestrator)
 
 ### `app.py`
+**The Front Door.** This is the main entry point to the application instance locally. It boots up the Chainlit UI, instantiates the underlying engines, ingests incoming files dropping them to the pipeline, and prints the "Glass Box" (showing exactly which retrieval strategy is at play: Vector, Graph, or Keyword).
 
-- **Purpose**: The main entry point for the Chainlit web interface.
-- **Responsibilities**:
-  - Initializes the Chainlit UI session and instantiates the `OrchestratorManager`.
-  - Handles real-time file uploads (PDF, DOCX, TXT, MD) through the UI and pipelines them into the ingestion workflow.
-  - Manages the question-answering conversational flow.
-  - Renders the "Glass Box" reasoning output dynamically, showing the retrieval strategy chosen, the retrieved BM25 chunk preview, and graph triples to the user.
-
-### `config.py`
-
-- **Purpose**: Centralized configuration and path management.
-- **Responsibilities**: Defines immutable paths to data directories (raw, processed, artifacts) locally and sets universal constants such as the default HuggingFace embedding model (`all-MiniLM-L6-v2`).
-
-### `.env` & `.env.example`
-
-- **Purpose**: Environment variable management.
-- **Responsibilities**: Stores sensitive API keys such as `GROQ_API_KEY`, and database credentials (`NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`).
-
-### `chainlit.md`
-
-- **Purpose**: UI Welcome Screen configuration.
-- **Responsibilities**: A markdown file that Chainlit reads to display an introduction and specific upload instructions when a user opens the web app.
-
-### `generation_log.md`
-
-- **Purpose**: Task/Log tracking.
-- **Responsibilities**: Contains tracking and structural updates regarding what functions and features have been integrated iteratively.
-
-### `requirements.txt`
-
-- **Purpose**: Dependency management.
-- **Responsibilities**: Lists all Python libraries required to install the project dependencies safely (e.g. `chainlit`, `groq`, `neo4j`, `rank_bm25`, `langchain_text_splitters`, etc.).
+### `src/orchestrator/manager.py`
+**The Core Brain.** While `app.py` is the UI, the `manager.py` is the actual intelligence router. 
+- **Role:** It actively queries the Lexical BM25, the Neo4j Knowledge Graph, and FAISS Vector engines. It fuses the returned information, verifies it contextually, and prompts a local LLM to deliver the final zero-hallucination semantic answer for the user.
 
 ---
 
-## 📁 Data Directories (`data/`)
+## 🧠 The Tri-Hybrid Search Brains
 
-The `data/` folder manages the lifecycle of document ingestion and indexing storage.
+Edu Nexus is powerful because it uses *three* concurrent search methodologies. These are mapped below:
 
-### `data/raw/`
+### 1. The Deep Brain (Graph Engine)
+*Location: `src/graph_engine/`*
+This pipeline discovers relationships using the Groq `openai/gpt-oss-120b` LLM and stores them as Knowledge Graphs in Neo4j.
+- **`extractor.py`**: The heavy lifter identifying precise "Entities" (Nodes) and semantic "Relationships" (Edges) from document text. 
+- **`neo4j_ops.py` / `builder.py`**: Pushes the extracted structural mappings logically straight into the remote Neo4j databases (`MERGE` deduplication).
 
-- **Purpose**: The foundational drop zone for unprocessed files uploaded by users. Serves as the raw collection state.
+### 2. The Semantic Brain (Vector Engine)
+*Location: `src/vector_engine/`*
+This engine captures the embedded contextual *meaning* behind chunks of text.
+- **`store.py`**: Creates semantic proximity layouts mapped into an offline FAISS local database using the standard `all-MiniLM-L6-v2` HuggingFace embeddings representation.
 
-### `data/processed/`
-
-- **Purpose**: Stores intermediate text assets.
-- **Details**: Outputs from the processing module go here. This includes standardized and cleaned text files as well as fully localized `.chunks.jsonl` files.
-
-### `data/artifacts/`
-
-- **Purpose**: Contains the compiled engine indices.
-- **Details**: Stores serialized databases that are built off the processed chunks. For example, the `bm25.pkl` which represents the Okapi BM25 lexical keyword index.
-
----
-
-## 📁 Source Code Modules (`src/`)
-
-### 1. Orchestrator Module (`src/orchestrator/`)
-
-#### File: `manager.py` (The Brain)
-
-- **Author:** Sarvesh
-- **Purpose**: Central intelligence coordinator that aggregates components of the RAG retrieval strategies.
-- **Tech Stack**: Python, `asyncio`, Groq API (`meta-llama/llama-4-scout-17b-16e-instruct`).
-- **Processing Logic**:
-  - Contains `MockManager` for simulation and `OrchestratorManager` for real deployments.
-  - Determines retrieval strategy natively based on the active state of engines (`both`, `bm25_only`, `graph_only`, `vector_only`, `none`).
-  - Fetches context jointly across the BM25 Engine, Neo4j Graph Engine, and FAISS Vector Store.
-  - Validates and fuses the combined textual knowledge.
-  - Instructs a powerful Groq Inference LLM over the contextual fragments avoiding hallucination bounds.
-  - Formats output for the UI "Glass Box" providing transparency into retrieval execution paths.
-  - Dynamically runs indexing reconstruction flows whenever fresh files are consumed by the system.
-
-### 2. Retrieval Module (`src/retrieval/`)
-
-#### File: `bm25_index.py` (Fast Brain)
-
-- **Purpose**: Performs high-speed lexical and keyword similarity queries over documents.
-- **Tech Stack**: `rank_bm25` (Okapi BM25 structural algorithm implementation).
-- **Processing Logic**:
-  - Dynamically scours the chunk boundaries contained strictly in the `.chunks.jsonl` objects.
-  - Builds robust indices handling lexical search features (e.g. stopword dropping, string tokenization).
-  - Serializes (`pickle`) the index and state map directly back to `data/artifacts/bm25.pkl`.
-  - Calculates probability scoring mechanisms to supply exact matching document bounds to the Orchestrator manager.
-
-### 3. Graph Engine Module (`src/graph_engine/`)
-
-#### File: `builder.py`
-
-- **Author:** Sarvesh
-- **Purpose**: The structural director representing DB pipeline pushes.
-- **Processing Logic**: Orchestrates DB ingestion converting data using the Extractor natively into graph form mapping `MERGE` parameters handling duplicates gracefully over the Neo4j API.
-
-#### File: `extractor.py`
-
-- **Purpose**: Sub-engine focused upon Knowledge Graph Entity (Node) and Semantic Edge (Relationship) identification.
-- **Tech Stack**: Groq API, Model: `openai/gpt-oss-120b`.
-- **Processing Logic**: Reads the granular subsets and pushes context up via rigid System prompts constraining JSON structures. Built purely using ultra-high processing parameters.
-
-#### File: `neo4j_ops.py`
-
-- **Purpose**: Execution connectivity point for Database bridging.
-- **Tech Stack**: Neo4j, `neo4j` Python driver.
-- **Processing Logic**: Instantiates driver, manages the sessions securely, manages test-cycles and injects Cypher scripts.
-
-### 4. Ingest Module (`src/ingest/`)
-
-#### File: `processor.py`
-
-- **Purpose**: The core logic boundary sorting initial uploads.
-- **Tech Stack**: `python-docx`, `pdfplumber`.
-- **Processing Logic**: Determines file extensions and delegates extraction logic paths for standardizing content into uniformly predictable text elements ensuring the data acts neutrally.
-
-#### File: `cleaner.py`
-
-- **Author:** Swaraj
-- **Purpose**: Sanitization logic application scaling out text noise.
-- **Processing Logic**: Employs Regex heuristics scanning standard documentation and strips page numbering, recurrent artifacts, or broken hyphens to ensure zero-cost processing overhead prior to moving content natively into chunking.
-
-### 5. Text Splitter Module (`src/splitter/`)
-
-#### File: `textSplitter.py`
-
-- **Author:** Saatvik
-- **Purpose**: Defines size bounds ensuring language model capacities aren't exceeded.
-- **Tech Stack**: `langchain_text_splitters` (`RecursiveCharacterTextSplitter`).
-- **Processing Logic**: Smashes combined strings predictably down from paragraphs into distinct blocks using specific separator hierarchies. Restricts bounds to 500 characters while preserving 50 character limits for surrounding contextual overlays.
-
-### 6. Vector Engine Module (`src/vector_engine/`)
-
-#### File: `store.py` (Semantic Brain)
-
-- **Author:** Saatvik
-- **Purpose**: Represents the Vector mapping component algorithms using FAISS.
-- **Tech Stack**: FAISS + `sentence-transformers`.
-- **Processing Logic**: Interprets and maps complex semantic relationships by deploying vector stores using a lazy-loaded SentenceTransformer model (`all-MiniLM-L6-v2`) and a FAISS `IndexFlatIP`. Serializes FAISS indices and metadata to `data/artifacts/faiss.index` and `data/artifacts/faiss_meta.pkl`.
-
-#### File: `vector.py`
-
-- **Author:** Saatvik
-- **Purpose**: Secondary abstraction for interacting with FAISS.
-- **Tech Stack**: LangChain (`FAISS`, `HuggingFaceEmbeddings`).
-- **Processing Logic**: Simplifies FAISS operations via LangChain's vectorstore wrappers. Provides database loading, creation, and searching functional bounds.
-
-### 7. Pipeline Module (`src/pipeline/`)
-
-#### File: `run_pipeline.py`
-
-- **Purpose**: Orchestrating script for unifying conversions.
-- **Processing Logic**: Ties OCR tasks, DOCX generators, and the ingestion processes to test conversion flows smoothly.
+### 3. The Fast Brain (Keyword Lexical Engine)
+*Location: `src/retrieval/`*
+When explicit exact match indexing matters over broad semantic meaning.
+- **`bm25_index.py`**: Analyzes the raw token sequences (Okapi BM25 algorithm), bypassing LLMs, ensuring critical terminology isn't missed by vector proximity models. 
 
 ---
 
-## 📁 Auxiliary Directories
+## 🧹 The Ingestion Pipeline
 
-### `docs/`
+To make retrieval efficient, raw incoming documents must be standardized. 
+*Location: `src/ingest/` & `src/splitter/`*
 
-- **Purpose**: Retains supporting architectural documentation spanning API bounds internally to allow deeper onboarding and reference scoping across operations.
+- **`src/ingest/processor.py`**: Handles incoming raw PDFs or DOCX uploads and strips them into a uniform unstructured string. 
+- **`src/ingest/cleaner.py`**: Fires Regex heuristic functions rapidly resolving recurring noises (such as page headers/footers) prior to embedding.
+- **`src/splitter/textSplitter.py`**: Smarts-splits the cleaned master string into strict 500-character chunks to cap processing ceilings reliably. Ensures LLM context bounds are protected and fast.
 
-### `tests/`
+---
 
-- **Purpose**: Scaffolds integration layers and strict units evaluating the programmatic fidelity across discrete bounds inside Edu Nexus.
+## 🗄️ Standardized Data Formats
 
-### `prompts/`
+*Location: `data/`*
 
-- **Purpose**: Holds system schemas defining contextual limitations forcing the external LLMs into desired outcomes natively without polluting Python functionality bounds.
+- **`data/raw/`**: Where initial files start out (messy, PDFs, docs).
+- **`data/processed/`**: The pipeline transforms raw text directly into normalized local JSON structures (`.chunks.jsonl`).
+- **`data/artifacts/`**: Where our Brains (`bm25.pkl` lexicons & `faiss.index` semantical vectors) securely cache to disk so rebooting doesn't require rebuilding embeddings.

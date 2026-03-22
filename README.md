@@ -29,45 +29,20 @@
    chainlit run app.py
    ```
 
-## 📂 Project Structure
+## 📂 Project Structure (Overview)
+
+> **New to the project?** See [MODULE_DETAILS.md](MODULE_DETAILS.md) for a functional introduction and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md) for a deep-dive directory map.
 
 ```text
 Edu-Nexus/
-├── .chainlit/            # Chainlit UI configurations and translations
-├── .env                  # [SECRET] API Keys (Groq, Neo4j, Gemini) - DO NOT COMMIT
-├── .env.example          # [PUBLIC] Template for API keys
-├── .gitignore            # Files to exclude from Git
-├── HOW_TO_RUN.txt        # Run instructions
-├── app.py                # Chainlit UI entry point
-├── chainlit.md           # Chainlit UI Welcome Screen configuration
-├── config.py             # Global paths and configuration constants
-├── requirements.txt      # Python dependencies
-├── README.md             # Project documentation
-│
-├── data/                 # Shared Data Storage
-│   ├── raw/              # [INPUT] Raw PDFs go here (Kulvansh)
-│   ├── processed/        # [INTERMEDIATE] Cleaned .txt files (Swaraj)
-│   └── artifacts/        # [OUTPUT] FAISS indices & metadata (Saatvik)
-│
-├── src/                  # Source Code
-    ├── ingest/           # [MODULE] Data Engineering (Swaraj) - [ACTIVE]
-    │   ├── processor.py  # Logic: Batch processing & DOCX extraction
-    │   └── cleaner.py    # Logic: PDF extraction & Text Cleaning
-    │
-    ├── splitter/         # [MODULE] Text Splitting (Saatvik) - [ACTIVE]
-    │   └── textSplitter.py # Logic: Chunking text
-    │
-    ├── vector_engine/    # [MODULE] Vector Database (Saatvik) - [ACTIVE]
-    │   ├── store.py      # Logic: Semantic Brain using FAISS
-    │   └── vector.py     # Logic: Chunking & FAISS Operations via Langchain
-    │
-    ├── graph_engine/     # [MODULE] Knowledge Graph (Sarvesh) - [ACTIVE]
-    │   ├── builder.py    # Logic: Orchestration (Extract -> Push to Neo4j)
-    │   ├── extractor.py  # Logic: LLM Entity Extraction (Groq openai/gpt-oss-120b)
-    │   └── neo4j_ops.py  # Logic: Neo4j Cypher Queries
-    │
-    └── orchestrator/     # [MODULE] The Brain (Sarvesh) - [ACTIVE]
-        └── manager.py    # Logic: Routing (Graph vs Vector vs Keyword) and Web UI connection
+├── data/                 # Stores raw PDFs, processed JSON chunks, and active serialized FAISS/BM25 Index artifacts.
+├── docs/                 # Internal system documentation.
+├── frontend/             # Dedicated React/Next web assets bridging the API.
+├── src/                  # Tri-Hybrid retrieval engine source components (Graph, Vector, Lexical keyword).
+├── tests/                # Testing framework suites.
+├── app.py                # Chainlit UI/API orchestrator runtime entry point.
+├── config.py             # Root configurations, embedding models, and runtime paths.
+├── PROJECT_STRUCTURE.md  # Detailed, granular breakdown of the directory map.
+└── MODULE_DETAILS.md     # Detailed functional map linking crucial files to their operations.
 ```
-
 

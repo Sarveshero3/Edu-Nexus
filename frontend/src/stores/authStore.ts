@@ -1,3 +1,4 @@
+// TODO: implement real auth — currently mocked for development
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 

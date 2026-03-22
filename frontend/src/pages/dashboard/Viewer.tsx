@@ -1,24 +1,79 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect  } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ChevronRight, ChevronLeft, Send, Sparkles, Highlighter } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Send, Sparkles, FileText, Loader2, AlertCircle, MessageSquareText } from 'lucide-react'
+import { useQuery, useMutation } from '@tanstack/react-query'
 import PageTransition from '@/components/common/PageTransition'
 import GlassCard from '@/components/common/GlassCard'
-
-const sampleText = `Machine learning is a subset of artificial intelligence that focuses on developing algorithms and statistical models that enable computers to learn and improve from experience without being explicitly programmed.
-
-Supervised learning, a primary paradigm in machine learning, involves training models on labeled datasets where the desired output is known. The algorithm learns a mapping function from input to output, which can then be applied to new, unseen data. Common supervised learning algorithms include linear regression, logistic regression, decision trees, random forests, and neural networks.
-
-Unsupervised learning, in contrast, deals with unlabeled data. The algorithm must discover the inherent structure and patterns within the data without guidance. Clustering algorithms like K-means, hierarchical clustering, and DBSCAN group similar data points together. Dimensionality reduction techniques such as PCA and t-SNE help visualize high-dimensional data.
-
-Reinforcement learning represents a third paradigm where an agent learns to make decisions by interacting with an environment. The agent receives rewards or penalties based on its actions and learns to maximize cumulative reward over time. Applications include game playing, robotics, and autonomous systems.`
+import { getSourceContent, getSourceFileUrl, sendChat, type ChunkData, type ChatResponse } from '@/lib/api'
 
 export default function Viewer() {
   const { id } = useParams()
-  const [chatInput, setChatInput] = useState('')
-  const [page, setPage] = useState(1)
-  const totalPages = 12
+  const docName = decodeURIComponent(id || '')
+  const ext = docName.split('.').pop()?.toLowerCase() || ''
+  const isPdf = ext === 'pdf'
 
-  const filename = id === '1' ? 'machine_learning_fundamentals.pdf' : `document_${id}.pdf`
+  const [chatInput, setChatInput] = useState('')
+  const [page, setPage] = useState(0)
+  const [selectedText, setSelectedText] = useState('')
+  const [chatMessages, setChatMessages] = useState<{ role: 'ai' | 'user'; text: string }[]>([
+    { role: 'ai', text: `I can answer questions about **${docName}**. ${isPdf ? 'Select text from the PDF to ask about it, or type a question below.' : 'Ask a question below.'}` },
+  ])
+  const chatEndRef = useRef<HTMLDivElement>(null)
+
+  const CHUNKS_PER_PAGE = 5
+
+  // For non-PDFs: fetch chunks
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['source-content', docName],
+    queryFn: () => getSourceContent(docName),
+    enabled: !!docName && !isPdf,
+  })
+
+  const chatMutation = useMutation({
+    mutationFn: sendChat,
+    onSuccess: (data: ChatResponse) => {
+      setChatMessages((prev) => [...prev, { role: 'ai', text: data.answer }])
+    },
+    onError: (err: Error) => {
+      setChatMessages((prev) => [...prev, { role: 'ai', text: `Error: ${err.message}` }])
+    },
+  })
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatMessages])
+
+  // Listen for text selection (for non-PDF content)
+  useEffect(() => {
+    const handleSelection = () => {
+      const sel = window.getSelection()?.toString().trim()
+      if (sel && sel.length > 5) {
+        setSelectedText(sel)
+      }
+    }
+    document.addEventListener('mouseup', handleSelection)
+    return () => document.removeEventListener('mouseup', handleSelection)
+  }, [])
+
+  const chunks = data?.chunks || []
+  const totalPages = Math.ceil(chunks.length / CHUNKS_PER_PAGE)
+  const pageChunks = chunks.slice(page * CHUNKS_PER_PAGE, (page + 1) * CHUNKS_PER_PAGE)
+
+  const handleSendChat = (text?: string) => {
+    const query = text || chatInput.trim()
+    if (!query || chatMutation.isPending) return
+    setChatMessages((prev) => [...prev, { role: 'user', text: query }])
+    chatMutation.mutate(query)
+    setChatInput('')
+    setSelectedText('')
+  }
+
+  const handleAskAboutSelection = () => {
+    if (selectedText) {
+      const query = `Regarding this text from ${docName}: "${selectedText.slice(0, 200)}..." — explain this in detail.`
+      handleSendChat(query)
+    }
+  }
 
   return (
     <PageTransition className="h-[calc(100vh)] flex flex-col">
@@ -26,59 +81,143 @@ export default function Viewer() {
       <div className="flex items-center gap-2 px-6 py-3 border-b border-[rgba(255,255,255,0.06)] text-sm">
         <Link to="/dashboard/sources" className="text-text-muted hover:text-white">Sources</Link>
         <ChevronRight size={14} className="text-text-muted" />
-        <span className="text-white">{filename}</span>
+        <span className="text-white truncate">{docName || 'Document'}</span>
+        <span className="ml-auto text-text-muted text-xs">{ext.toUpperCase()}</span>
       </div>
+
+      {/* Selected text floating bar */}
+      {selectedText && (
+        <div className="mx-6 mt-2 flex items-center gap-3 px-4 py-2 rounded-lg bg-accent-cyan/10 border border-accent-cyan/20">
+          <MessageSquareText size={14} className="text-accent-cyan shrink-0" />
+          <p className="text-white text-xs flex-1 truncate">"{selectedText.slice(0, 80)}..."</p>
+          <button
+            onClick={handleAskAboutSelection}
+            className="text-accent-cyan text-xs font-semibold hover:underline shrink-0"
+          >
+            Ask about this →
+          </button>
+        </div>
+      )}
 
       {/* Split layout */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left: Document */}
-        <div className="flex-1 lg:w-[60%] flex flex-col p-6 overflow-y-auto">
-          <div className="flex items-center gap-2 mb-4">
-            <Highlighter size={16} className="text-accent-cyan" />
-            <span className="text-text-muted text-xs">Select text to ask questions about it</span>
-          </div>
+        <div className="flex-1 lg:w-[60%] flex flex-col overflow-hidden">
+          {isPdf ? (
+            /* PDF Viewer — native browser PDF rendering */
+            <iframe
+              src={getSourceFileUrl(docName)}
+              className="flex-1 w-full bg-[#1a1a2e]"
+              title={docName}
+              style={{ border: 'none' }}
+            />
+          ) : (
+            /* Non-PDF: chunk view */
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <FileText size={16} className="text-accent-cyan" />
+                <span className="text-text-muted text-xs">Parsed text chunks</span>
+                {chunks.length > 0 && (
+                  <span className="text-text-muted text-xs ml-auto">{chunks.length} total chunks</span>
+                )}
+              </div>
 
-          <GlassCard hover={false} className="p-8 flex-1">
-            <p className="text-white/90 text-sm leading-relaxed whitespace-pre-line">
-              {sampleText}
-            </p>
-          </GlassCard>
+              {isLoading && (
+                <div className="flex-1 flex items-center justify-center py-16">
+                  <Loader2 className="text-accent-cyan animate-spin" size={32} />
+                </div>
+              )}
 
-          <div className="flex items-center justify-between mt-4">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-30"
-            >
-              <ChevronLeft size={14} /> Previous
-            </button>
-            <span className="text-text-muted text-sm">Page {page} of {totalPages}</span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-30"
-            >
-              Next <ChevronRight size={14} />
-            </button>
-          </div>
+              {error && (
+                <GlassCard hover={false} className="p-6">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="text-red-400" size={20} />
+                    <p className="text-red-400 text-sm">Could not load document content.</p>
+                  </div>
+                </GlassCard>
+              )}
+
+              {!isLoading && !error && chunks.length === 0 && (
+                <div className="flex items-center justify-center py-16">
+                  <p className="text-text-muted">No content available for this document.</p>
+                </div>
+              )}
+
+              {!isLoading && pageChunks.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  {pageChunks.map((chunk: ChunkData, i: number) => (
+                    <GlassCard key={chunk.id} hover={false} className="p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-accent-cyan text-[11px] font-semibold">Chunk {page * CHUNKS_PER_PAGE + i + 1}</span>
+                      </div>
+                      <p className="text-white/90 text-sm leading-relaxed whitespace-pre-line">{chunk.text}</p>
+                    </GlassCard>
+                  ))}
+                </div>
+              )}
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <button
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                    className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-30"
+                  >
+                    <ChevronLeft size={14} /> Previous
+                  </button>
+                  <span className="text-text-muted text-sm">Page {page + 1} of {totalPages}</span>
+                  <button
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={page >= totalPages - 1}
+                    className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-30"
+                  >
+                    Next <ChevronRight size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: Chat */}
         <div className="hidden lg:flex w-[40%] flex-col border-l border-[rgba(255,255,255,0.06)]">
           <div className="px-5 py-4 border-b border-[rgba(255,255,255,0.06)]">
             <h3 className="text-white font-bold text-sm">Ask about this document</h3>
-            <p className="text-text-muted text-[11px] italic mt-1">Answering questions about: {filename}</p>
+            <p className="text-text-muted text-[11px] italic mt-1">{docName}</p>
           </div>
 
           <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
-            <div className="flex gap-3">
-              <div className="w-7 h-7 rounded-full bg-bg-sidebar flex items-center justify-center shrink-0">
-                <Sparkles className="text-accent-cyan" size={12} />
+            {chatMessages.map((msg, i) => (
+              <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                {msg.role === 'ai' && (
+                  <div className="w-7 h-7 rounded-full bg-bg-sidebar flex items-center justify-center shrink-0">
+                    <Sparkles className="text-accent-cyan" size={12} />
+                  </div>
+                )}
+                <div className={
+                  msg.role === 'user'
+                    ? 'bg-gradient-to-br from-accent-cyan to-accent-purple text-white px-4 py-2.5 rounded-[12px] rounded-br-[4px] text-xs max-w-[80%]'
+                    : 'glass-card px-4 py-2.5 rounded-[12px] rounded-bl-[4px] text-xs text-white/90 max-w-[80%] whitespace-pre-line'
+                }>
+                  {msg.text}
+                </div>
               </div>
-              <div className="glass-card px-4 py-2.5 rounded-[12px] rounded-bl-[4px] text-xs text-white/90">
-                I can answer questions specifically about this document. Try selecting text or asking a question below.
+            ))}
+            {chatMutation.isPending && (
+              <div className="flex gap-3">
+                <div className="w-7 h-7 rounded-full bg-bg-sidebar flex items-center justify-center shrink-0">
+                  <Sparkles className="text-accent-cyan" size={12} />
+                </div>
+                <div className="glass-card px-4 py-2.5 rounded-[12px]">
+                  <div className="flex gap-1.5">
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                    <span className="typing-dot" />
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+            <div ref={chatEndRef} />
           </div>
 
           <div className="px-5 pb-4 pt-2 border-t border-[rgba(255,255,255,0.06)]">
@@ -86,10 +225,16 @@ export default function Viewer() {
               <input
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSendChat() }}
                 placeholder="Ask a question..."
                 className="input-field text-sm flex-1"
+                disabled={chatMutation.isPending}
               />
-              <button className="btn-gradient p-2.5 rounded-full shrink-0">
+              <button
+                onClick={() => handleSendChat()}
+                disabled={!chatInput.trim() || chatMutation.isPending}
+                className="btn-gradient p-2.5 rounded-full shrink-0 disabled:opacity-40"
+              >
                 <Send size={14} />
               </button>
             </div>

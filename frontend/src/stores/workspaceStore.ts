@@ -25,15 +25,9 @@ export interface ChatSession {
   createdAt: string
 }
 
-const WORKSPACE_COLORS = [
-  '#6366f1', '#ec4899', '#f59e0b', '#10b981',
-  '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6',
-]
-
 export interface Workspace {
   id: string
   name: string
-  color: string  // auto-assigned color tag
   sourceNames: string[]  // filenames that belong to this workspace
   chatSessions: ChatSession[]
   createdAt: string
@@ -54,7 +48,6 @@ interface WorkspaceState {
   // --- Sources in workspace ---
   addSourceToWorkspace: (workspaceId: string, sourceName: string) => void
   removeSourceFromWorkspace: (workspaceId: string, sourceName: string) => void
-  syncSourceNames: (backendNames: string[]) => void
 
   // --- Chat sessions ---
   createChatSession: (workspaceId: string, title?: string) => string
@@ -80,11 +73,9 @@ export const useWorkspace = create<WorkspaceState>()(
 
       createWorkspace: (name: string) => {
         const id = generateId()
-        const idx = get().workspaces.length
         const workspace: Workspace = {
           id,
           name,
-          color: WORKSPACE_COLORS[idx % WORKSPACE_COLORS.length],
           sourceNames: [],
           chatSessions: [],
           createdAt: new Date().toISOString(),
@@ -139,22 +130,11 @@ export const useWorkspace = create<WorkspaceState>()(
         }))
       },
 
-      // Prune sourceNames that no longer exist in the backend
-      syncSourceNames: (backendNames: string[]) => {
-        const nameSet = new Set(backendNames)
-        set((s) => ({
-          workspaces: s.workspaces.map((w) => ({
-            ...w,
-            sourceNames: w.sourceNames.filter((n) => nameSet.has(n)),
-          })),
-        }))
-      },
-
       createChatSession: (workspaceId, title) => {
         const chatId = generateId()
         const session: ChatSession = {
           id: chatId,
-          title: title || `Chat ${(get().workspaces.find((w) => w.id === workspaceId)?.chatSessions.length ?? 0) + 1}`,
+          title: title || `Chat ${get().workspaces.find((w) => w.id === workspaceId)?.chatSessions.length + 1 || 1}`,
           messages: [],
           createdAt: new Date().toISOString(),
         }

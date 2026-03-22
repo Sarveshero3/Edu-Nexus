@@ -100,8 +100,12 @@ ANSWER_PROMPT = (
     "── FORMAT ──\n"
     "- Use Markdown for readability.\n"
     "- Be concise, detailed, and academic in tone.\n"
-    "- Cite which retrieval source supported each claim "
-    "(e.g., [Graph], [Keyword Chunk 2], [Semantic Chunk 1]).\n"
+    "- Cite the source document for each claim using the format "
+    "[Source: document_name] where document_name is the filename "
+    "shown in the context block headers.\n"
+    "- If a context section is labeled with a document name, use that "
+    "name in your citation. Do NOT use generic labels like "
+    "'Chunk 1' or 'Semantic Chunk'.\n"
 )
 
 
@@ -446,13 +450,15 @@ class OrchestratorManager:
             return text
         return " ".join(words[:max_words]) + " ..."
 
-    @staticmethod
-    def _format_keyword_context(chunks: List[str]) -> str:
+    def _format_keyword_context(self, chunks: List[str]) -> str:
         if not chunks:
             return "_No keyword chunks retrieved._"
         lines = []
         for i, chunk in enumerate(chunks, 1):
-            lines.append(f"**[Keyword Chunk {i}]**\n{OrchestratorManager._truncate(chunk)}")
+            # Try to identify which document this chunk came from
+            doc_name = self._guess_chunk_source(chunk)
+            label = f"[Source: {doc_name}]" if doc_name else f"[Keyword Result {i}]"
+            lines.append(f"**{label}**\n{OrchestratorManager._truncate(chunk)}")
         return "\n\n".join(lines)
 
     @staticmethod
@@ -467,16 +473,37 @@ class OrchestratorManager:
             lines.append(f"- **{src}** -> _{rel}_ -> **{tgt}**")
         return "\n".join(lines)
 
-    @staticmethod
-    def _format_semantic_context(results: List[Tuple[str, float]]) -> str:
+    def _format_semantic_context(self, results: List[Tuple[str, float]]) -> str:
         if not results:
             return "_No semantic chunks retrieved._"
         lines = []
         for i, (chunk, score) in enumerate(results, 1):
+            doc_name = self._guess_chunk_source(chunk)
+            label = f"[Source: {doc_name}]" if doc_name else f"[Semantic Result {i}]"
             lines.append(
-                f"**[Semantic Chunk {i}]** (score: {score:.4f})\n{OrchestratorManager._truncate(chunk)}"
+                f"**{label}** (relevance: {score:.2f})\n{OrchestratorManager._truncate(chunk)}"
             )
         return "\n\n".join(lines)
+
+    def _guess_chunk_source(self, chunk_text: str) -> Optional[str]:
+        """Try to match a chunk to its source document by checking JSONL files."""
+        snippet = chunk_text[:80]
+        for fname in self._ingested_files:
+            jsonl = PROCESSED_DIR / f"{Path(fname).stem}.chunks.jsonl"
+            if jsonl.exists():
+                try:
+                    with open(jsonl, "r", encoding="utf-8") as f:
+                        for line in f:
+                            data = json.loads(line.strip())
+                            text = data.get("text", data.get("chunk", ""))
+                            if snippet in text:
+                                return fname
+                except Exception:
+                    pass
+        # Fallback: return first file if only one exists
+        if len(self._ingested_files) == 1:
+            return self._ingested_files[0]
+        return None
 
     def _build_context_block(
         self,

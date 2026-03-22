@@ -37,6 +37,7 @@ IF NOT EXIST ".env" (
     echo [4/5] Creating .env file from template...
     (
         echo GROQ_API_KEY=your_groq_api_key_here
+        echo NVIDIA_API_KEY=your_nvidia_api_key_here
         echo NEO4J_URI=bolt://localhost:7687
         echo NEO4J_USER=neo4j
         echo NEO4J_PASSWORD=your_neo4j_password_here
@@ -67,17 +68,18 @@ echo ============================================================
 echo   Setup complete!
 echo.
 echo   IMPORTANT: Edit .env and fill in your API keys:
-echo     - GROQ_API_KEY  (required)
-echo     - NEO4J_*       (optional, for graph features)
+echo     - GROQ_API_KEY   (required)
+echo     - NVIDIA_API_KEY  (optional, LLM fallback)
+echo     - NEO4J_*         (optional, for graph features)
 echo.
 echo   Then run: run.bat
 echo.
 echo   NEW FEATURES:
-echo     - Workspaces: organize documents + chats
-echo     - Batch upload: process multiple files in parallel
-echo     - PDF viewer: view PDFs inline with side chat
-echo     - Engine status: live BM25/FAISS/Neo4j indicators
-echo     - Suggested questions: AI-generated starter questions
+echo     - LLM Fallback: auto-retry with backup models on rate limit
+echo     - Workspaces: organize documents + scoped chat
+echo     - Graph Explorer: auto-zoom, Barnes-Hut force layout
+echo     - Resizable panels: drag to resize PDF viewer + chat
+echo     - Smart citations: no citations in single-doc chat
 echo ============================================================
 echo.
 pause

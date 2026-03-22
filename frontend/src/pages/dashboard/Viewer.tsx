@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect  } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ChevronRight, ChevronLeft, Send, Sparkles, FileText, Loader2, AlertCircle, MessageSquareText } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Send, Sparkles, FileText, Loader2, AlertCircle, MessageSquareText, GripVertical } from 'lucide-react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import PageTransition from '@/components/common/PageTransition'
 import GlassCard from '@/components/common/GlassCard'
@@ -20,6 +20,39 @@ export default function Viewer() {
   ])
   const chatEndRef = useRef<HTMLDivElement>(null)
 
+  // ── Resizable panel ──────────────────────────────────────────────────
+  const [chatWidthPct, setChatWidthPct] = useState(35) // percentage of container
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isDragging = useRef(false)
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isDragging.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [])
+
+  useEffect(() => {
+    const handleMove = (e: MouseEvent) => {
+      if (!isDragging.current || !containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const pct = ((rect.right - e.clientX) / rect.width) * 100
+      setChatWidthPct(Math.max(20, Math.min(60, pct)))
+    }
+    const handleUp = () => {
+      isDragging.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', handleMove)
+    window.addEventListener('mouseup', handleUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMove)
+      window.removeEventListener('mouseup', handleUp)
+    }
+  }, [])
+  // ────────────────────────────────────────────────────────────────────
+
   const CHUNKS_PER_PAGE = 5
 
   // For non-PDFs: fetch chunks
@@ -30,7 +63,7 @@ export default function Viewer() {
   })
 
   const chatMutation = useMutation({
-    mutationFn: sendChat,
+    mutationFn: (query: string) => sendChat(query, [docName], true),
     onSuccess: (data: ChatResponse) => {
       setChatMessages((prev) => [...prev, { role: 'ai', text: data.answer }])
     },
@@ -99,10 +132,10 @@ export default function Viewer() {
         </div>
       )}
 
-      {/* Split layout */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Split layout with resizable panels */}
+      <div className="flex-1 flex overflow-hidden" ref={containerRef}>
         {/* Left: Document */}
-        <div className="flex-1 lg:w-[60%] flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ width: `${100 - chatWidthPct}%` }}>
           {isPdf ? (
             /* PDF Viewer — native browser PDF rendering */
             <iframe
@@ -179,8 +212,19 @@ export default function Viewer() {
           )}
         </div>
 
+        {/* Drag handle */}
+        <div
+          onMouseDown={handleDragStart}
+          className="hidden lg:flex w-2 cursor-col-resize items-center justify-center hover:bg-accent-cyan/10 transition-colors group"
+        >
+          <GripVertical size={14} className="text-text-muted group-hover:text-accent-cyan" />
+        </div>
+
         {/* Right: Chat */}
-        <div className="hidden lg:flex w-[40%] flex-col border-l border-[rgba(255,255,255,0.06)]">
+        <div
+          className="hidden lg:flex flex-col border-l border-[rgba(255,255,255,0.06)]"
+          style={{ width: `${chatWidthPct}%` }}
+        >
           <div className="px-5 py-4 border-b border-[rgba(255,255,255,0.06)]">
             <h3 className="text-white font-bold text-sm">Ask about this document</h3>
             <p className="text-text-muted text-[11px] italic mt-1">{docName}</p>

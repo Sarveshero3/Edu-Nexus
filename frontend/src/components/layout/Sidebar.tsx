@@ -55,7 +55,7 @@ export default function Sidebar() {
 
   const handleLogout = () => {
     signOut()
-    navigate('/sign-in')
+    navigate('/')
   }
 
   return (
@@ -80,7 +80,11 @@ export default function Sidebar() {
             onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
             className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)] transition-colors text-sm text-white border border-[rgba(255,255,255,0.06)]"
           >
-            <LayoutGrid size={14} className="text-accent-cyan shrink-0" />
+            {activeWs ? (
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: activeWs.color }} />
+            ) : (
+              <LayoutGrid size={14} className="text-accent-cyan shrink-0" />
+            )}
             <span className="truncate flex-1 text-left">
               {activeWs?.name || 'Select Workspace'}
             </span>
@@ -102,14 +106,14 @@ export default function Sidebar() {
                       : 'text-text-secondary hover:bg-[rgba(255,255,255,0.04)]'
                   )}
                 >
-                  <span
-                    className="truncate flex-1"
+                  <span className="flex items-center gap-2 truncate flex-1"
                     onClick={() => {
                       setActiveWorkspace(ws.id)
                       setWsDropdownOpen(false)
                       navigate('/dashboard/sources')
                     }}
                   >
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ws.color || '#5BC8F5' }} />
                     {ws.name}
                   </span>
                   <span className="text-[10px] text-text-muted mr-2">

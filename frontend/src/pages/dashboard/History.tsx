@@ -1,36 +1,73 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronDown, RotateCw, MessageSquare, Trash2, Loader2, AlertCircle } from 'lucide-react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, MessageSquare, Trash2, AlertCircle } from 'lucide-react'
 import PageTransition from '@/components/common/PageTransition'
 import GlassCard from '@/components/common/GlassCard'
 import EngineBadge from '@/components/common/EngineBadge'
-import PillButton from '@/components/common/PillButton'
 import { cn } from '@/lib/utils'
-import { getHistory, deleteHistory, type HistoryEntry } from '@/lib/api'
+import { useWorkspace, type Message } from '@/stores/workspaceStore'
+
+/**
+ * History — Workspace-Scoped
+ * Shows all messages from the active workspace's chat sessions,
+ * ordered by most recent. Each entry is expandable.
+ */
 
 const tabs = ['All', 'BM25', 'FAISS', 'Neo4j', 'Hybrid'] as const
 
+interface FlatEntry {
+  id: string
+  query: string
+  answer: string
+  engine_used: string
+  timestamp: string
+  chatTitle: string
+  chatId: string
+}
+
 export default function History() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<string>('All')
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const { data: history = [], isLoading, error } = useQuery({
-    queryKey: ['history'],
-    queryFn: getHistory,
-  })
+  const activeWorkspaceId = useWorkspace((s) => s.activeWorkspaceId)
+  const getActiveWorkspace = useWorkspace((s) => s.getActiveWorkspace)
+  const setActiveChatSession = useWorkspace((s) => s.setActiveChatSession)
+  const deleteChatSession = useWorkspace((s) => s.deleteChatSession)
 
-  const deleteMutation = useMutation({
-    mutationFn: deleteHistory,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['history'] }),
-  })
+  const ws = getActiveWorkspace()
+
+  // Flatten all Q/A pairs from the active workspace's chat sessions
+  const entries: FlatEntry[] = []
+  if (ws) {
+    for (const session of ws.chatSessions) {
+      const msgs = session.messages
+      for (let i = 0; i < msgs.length; i++) {
+        const m = msgs[i]
+        if (m.role === 'user') {
+          // Find next assistant message
+          const next: Message | undefined = msgs[i + 1]
+          entries.push({
+            id: m.id,
+            query: m.content,
+            answer: next?.role === 'assistant' ? next.content : '(no response)',
+            engine_used: next?.engine_used || 'none',
+            timestamp: m.timestamp,
+            chatTitle: session.title,
+            chatId: session.id,
+          })
+        }
+      }
+    }
+  }
+
+  // Sort newest first
+  entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
   const filtered = activeTab === 'All'
-    ? history
-    : history.filter((q: HistoryEntry) => q.engine_used === activeTab.toLowerCase())
+    ? entries
+    : entries.filter((q) => q.engine_used === activeTab.toLowerCase())
 
   const timeAgo = (ts: string) => {
     const diff = Date.now() - new Date(ts).getTime()
@@ -41,13 +78,13 @@ export default function History() {
     return `${Math.floor(hrs / 24)}d ago`
   }
 
-  if (error) {
+  if (!ws) {
     return (
       <PageTransition className="p-6 lg:p-8">
         <GlassCard hover={false} className="p-6">
           <div className="flex items-center gap-3">
-            <AlertCircle className="text-red-400" size={20} />
-            <p className="text-red-400 text-sm">Cannot connect to backend. Is the server running?</p>
+            <AlertCircle className="text-text-muted" size={20} />
+            <p className="text-text-muted text-sm">Select a workspace to see history.</p>
           </div>
         </GlassCard>
       </PageTransition>
@@ -56,7 +93,10 @@ export default function History() {
 
   return (
     <PageTransition className="p-6 lg:p-8">
-      <h1 className="text-2xl font-bold text-white mb-6">Query History</h1>
+      <div className="flex items-center gap-3 mb-6">
+        <h1 className="text-2xl font-bold text-white">Query History</h1>
+        <span className="text-text-muted text-xs">· {ws.name}</span>
+      </div>
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
@@ -76,14 +116,8 @@ export default function History() {
         ))}
       </div>
 
-      {isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="text-accent-cyan animate-spin" size={32} />
-        </div>
-      )}
-
       {/* Empty state */}
-      {!isLoading && filtered.length === 0 && (
+      {filtered.length === 0 && (
         <div className="text-center py-16">
           <MessageSquare className="text-text-muted mx-auto mb-4" size={40} />
           <p className="text-text-muted text-lg">No query history yet. Start a conversation in Chat.</p>
@@ -92,7 +126,7 @@ export default function History() {
 
       {/* Query list */}
       <div className="flex flex-col gap-3">
-        {filtered.map((q: HistoryEntry) => (
+        {filtered.map((q) => (
           <GlassCard key={q.id} hover={false} className="p-5">
             <div
               className="flex items-start justify-between cursor-pointer"
@@ -103,17 +137,10 @@ export default function History() {
                 <div className="flex items-center gap-3 mt-2">
                   <EngineBadge engine={q.engine_used} />
                   <span className="text-text-muted text-xs">{timeAgo(q.timestamp)}</span>
-                  <span className="text-text-muted text-xs">· {q.sources_count} sources</span>
+                  <span className="text-text-muted text-xs">· {q.chatTitle}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(q.id) }}
-                  className="text-text-muted hover:text-red-400 p-1.5 rounded transition-colors"
-                  title="Delete"
-                >
-                  <Trash2 size={14} />
-                </button>
                 <ChevronDown
                   size={16}
                   className={cn('text-text-muted transition-transform', expandedId === q.id && 'rotate-180')}
@@ -133,7 +160,10 @@ export default function History() {
                   <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.06)]">
                     <p className="text-text-muted text-sm leading-relaxed whitespace-pre-line">{q.answer}</p>
                     <button
-                      onClick={() => navigate('/dashboard/chat')}
+                      onClick={() => {
+                        setActiveChatSession(q.chatId)
+                        navigate('/dashboard/chat')
+                      }}
                       className="inline-flex items-center gap-2 text-accent-cyan text-sm mt-3 hover:underline"
                     >
                       <MessageSquare size={14} /> Open in Chat →

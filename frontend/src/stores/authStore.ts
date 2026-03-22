@@ -34,12 +34,19 @@ export const useAuth = create<AuthState>()(
         set({ isLoading: true })
         // Simulate API call
         await new Promise((r) => setTimeout(r, 800))
+        const userId = btoa(email).slice(0, 12) // deterministic ID from email
         const user: User = {
-          id: '1',
+          id: userId,
           name: email.split('@')[0],
           email,
           memberSince: new Date().toISOString(),
         }
+        // Clear workspace data if different user logged in
+        const lastUser = localStorage.getItem('edu-nexus-last-user')
+        if (lastUser && lastUser !== userId) {
+          localStorage.removeItem('edu-nexus-workspaces')
+        }
+        localStorage.setItem('edu-nexus-last-user', userId)
         set({ user, token: 'mock-jwt-token', isLoading: false })
       },
 
@@ -57,6 +64,8 @@ export const useAuth = create<AuthState>()(
 
       signOut: () => {
         set({ user: null, token: null })
+        // Clear workspace data on logout
+        localStorage.removeItem('edu-nexus-workspaces')
       },
 
       setUser: (user: User) => set({ user }),

@@ -206,8 +206,9 @@ async def upload_batch(files: list[UploadFile] = File(...)):
     # Step 2: Run extraction+chunking in parallel
     async def process_one(fname, path):
         ext = Path(fname).suffix.lower()
-        if ext not in manager._ingested_files.__class__.__mro__:
-            pass  # Extension check happens in _run_ingestion
+        supported = {".pdf", ".docx", ".txt", ".md", ".pptx", ".xlsx", ".csv"}
+        if ext not in supported:
+            return {"filename": fname, "status": "error", "message": f"Unsupported file type '{ext}'", "chunks_count": 0, "chunk_texts": []}
         try:
             dest = Path("data/raw") / fname
             shutil.copy2(str(path), dest)
@@ -594,6 +595,7 @@ async def get_graph_node_detail(node_name: str):
 async def search(
     q: str = Query(..., description="Search query"),
     engine: Optional[str] = Query(None, description="Engine: bm25, faiss, neo4j, or all"),
+    source_filter: Optional[str] = Query(None, description="Comma-separated source filenames to restrict search to"),
 ):
     """Run a targeted search across the tri-hybrid engines."""
     if not q.strip():
@@ -602,10 +604,35 @@ async def search(
     engine = (engine or "all").lower()
     results = {"query": q, "engine": engine, "hits": []}
 
+    # Parse source filter
+    allowed_sources = None
+    if source_filter:
+        allowed_sources = [s.strip() for s in source_filter.split(",") if s.strip()]
+
+    def _chunk_matches_source(chunk_text: str) -> bool:
+        """Check if a chunk belongs to one of the allowed source documents."""
+        if not allowed_sources:
+            return True
+        for fname in allowed_sources:
+            jsonl_path = Path("data/processed") / f"{Path(fname).stem}.chunks.jsonl"
+            if jsonl_path.exists():
+                try:
+                    with open(jsonl_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            data = json.loads(line.strip())
+                            text = data.get("text", data.get("chunk", ""))
+                            if chunk_text[:80] in text:
+                                return True
+                except Exception:
+                    pass
+        return False
+
     try:
         if engine in ("bm25", "all"):
             bm25_hits = manager._retrieve_bm25(q)
             for i, chunk in enumerate(bm25_hits):
+                if not _chunk_matches_source(chunk):
+                    continue
                 results["hits"].append({
                     "engine": "bm25",
                     "rank": i + 1,
@@ -616,6 +643,8 @@ async def search(
         if engine in ("faiss", "all"):
             faiss_hits = manager._retrieve_vector(q)
             for i, (chunk, score) in enumerate(faiss_hits):
+                if not _chunk_matches_source(chunk):
+                    continue
                 results["hits"].append({
                     "engine": "faiss",
                     "rank": i + 1,
@@ -709,6 +738,41 @@ async def get_suggestions():
         "Explain the relationship between the key terms in my documents",
     ]
     return ok(fallback)
+
+
+# ====================================================================== #
+#  SETTINGS                                                                #
+# ====================================================================== #
+
+engine_weights = {
+    "bm25_weight": 0.33,
+    "graph_weight": 0.33,
+    "vector_weight": 0.34,
+}
+
+
+class EngineWeights(BaseModel):
+    bm25_weight: float
+    graph_weight: float
+    vector_weight: float
+
+
+@app.get("/api/settings/engines")
+async def get_engine_settings():
+    """Get current engine weights."""
+    return ok(engine_weights)
+
+
+@app.post("/api/settings/engines")
+async def save_engine_settings(weights: EngineWeights):
+    """Save engine weights."""
+    global engine_weights
+    engine_weights = {
+        "bm25_weight": weights.bm25_weight,
+        "graph_weight": weights.graph_weight,
+        "vector_weight": weights.vector_weight,
+    }
+    return ok({"message": "Engine weights saved", **engine_weights})
 
 
 # ====================================================================== #

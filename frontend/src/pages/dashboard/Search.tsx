@@ -8,6 +8,7 @@ import GlassCard from '@/components/common/GlassCard'
 import EngineBadge from '@/components/common/EngineBadge'
 import { cn } from '@/lib/utils'
 import { search as apiSearch, type SearchResult, type SearchHit } from '@/lib/api'
+import { useWorkspace } from '@/stores/workspaceStore'
 
 const filters = ['All', 'BM25', 'FAISS', 'Neo4j'] as const
 
@@ -17,16 +18,18 @@ export default function SearchPage() {
   const query = params.get('q') || ''
   const [searchInput, setSearchInput] = useState(query)
   const [activeFilter, setActiveFilter] = useState('All')
+  const activeWs = useWorkspace((s) => s.getActiveWorkspace())
 
   useEffect(() => {
     setSearchInput(query)
   }, [query])
 
   const engineParam = activeFilter === 'All' ? undefined : activeFilter.toLowerCase()
+  const sourceFilter = activeWs?.sourceNames.length ? activeWs.sourceNames : undefined
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['search', query, engineParam],
-    queryFn: () => apiSearch(query, engineParam),
+    queryKey: ['search', query, engineParam, sourceFilter],
+    queryFn: () => apiSearch(query, engineParam, sourceFilter),
     enabled: !!query.trim(),
   })
 

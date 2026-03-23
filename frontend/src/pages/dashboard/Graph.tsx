@@ -373,9 +373,9 @@ export default function Graph() {
   return (
     <PageTransition className="h-screen flex flex-col" style={{ background: '#1a1b26' }}>
       {/* ── Floating controls — top-right ── */}
-      <div className="absolute top-4 right-4 z-30 flex items-center gap-2">
+      <div className="absolute top-4 left-4 z-30 flex items-center gap-3">
         {simNodes.length > 0 && (
-          <span className="text-white/40 text-xs font-medium mr-2">
+          <span className="text-white/50 text-sm font-medium px-3 py-1.5 rounded-xl bg-white/[0.06] border border-white/[0.08]">
             {simNodes.length} nodes · {rawEdges.length} edges
           </span>
         )}
@@ -384,13 +384,13 @@ export default function Graph() {
         <div className="relative">
           <button
             onClick={() => setShowLayoutMenu(!showLayoutMenu)}
-            className="h-9 px-3 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center gap-2 hover:bg-white/[0.10] transition-colors text-white/60 text-xs font-medium"
+            className="h-11 px-5 rounded-xl bg-white/[0.08] border border-white/[0.12] flex items-center gap-3 hover:bg-white/[0.14] transition-colors text-white/80 text-sm font-semibold shadow-lg"
           >
-            <LayoutGrid size={14} />
+            <LayoutGrid size={18} />
             {LAYOUTS.find((l) => l.key === layout)?.label}
           </button>
           {showLayoutMenu && (
-            <div className="absolute top-full right-0 mt-1 w-36 rounded-xl bg-[#1e2030] border border-white/[0.08] shadow-xl overflow-hidden z-50">
+            <div className="absolute top-full left-0 mt-2 w-48 rounded-xl bg-[#1e2030] border border-white/[0.12] shadow-2xl overflow-hidden z-50">
               {LAYOUTS.map((l) => (
                 <button
                   key={l.key}
@@ -400,10 +400,10 @@ export default function Graph() {
                     autoZoomApplied.current = false
                     setPan({ x: 0, y: 0 })
                   }}
-                  className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                  className={`w-full text-left px-5 py-3 text-sm font-medium transition-colors ${
                     layout === l.key
-                      ? 'bg-cyan-500/15 text-cyan-400 font-medium'
-                      : 'text-white/60 hover:bg-white/[0.05]'
+                      ? 'bg-cyan-500/15 text-cyan-400'
+                      : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
                   }`}
                 >
                   {l.label}
@@ -415,22 +415,22 @@ export default function Graph() {
 
         <button
           onClick={handleFitView}
-          className="w-9 h-9 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.10] transition-colors"
+          className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.12] flex items-center justify-center hover:bg-white/[0.14] transition-colors shadow-lg"
           title="Fit to view"
         >
-          <Maximize2 size={15} className="text-white/50" />
+          <Maximize2 size={18} className="text-white/70" />
         </button>
         <button
           onClick={() => setZoom((z) => Math.min(z + 0.2, 4))}
-          className="w-9 h-9 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.10] transition-colors"
+          className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.12] flex items-center justify-center hover:bg-white/[0.14] transition-colors shadow-lg"
         >
-          <ZoomIn size={15} className="text-white/50" />
+          <ZoomIn size={18} className="text-white/70" />
         </button>
         <button
           onClick={() => setZoom((z) => Math.max(z - 0.2, 0.15))}
-          className="w-9 h-9 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.10] transition-colors"
+          className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.12] flex items-center justify-center hover:bg-white/[0.14] transition-colors shadow-lg"
         >
-          <ZoomOut size={15} className="text-white/50" />
+          <ZoomOut size={18} className="text-white/70" />
         </button>
       </div>
 
@@ -499,8 +499,8 @@ export default function Graph() {
               <line
                 key={i}
                 x1={e.sx} y1={e.sy} x2={e.tx} y2={e.ty}
-                stroke="rgba(255,255,255,0.06)"
-                strokeWidth={0.8}
+                stroke="rgba(255,255,255,0.25)"
+                strokeWidth={1.5}
               />
             ))}
 

@@ -1,71 +1,114 @@
-import os
-import json
-import re
-from dotenv import load_dotenv
-from groq import Groq
+"""
+Graph Entity Extractor — Edu Nexus
+====================================
+Replaces the Groq LLM extractor with GLiNER for local, offline NER.
+Eliminates ALL API calls during preprocessing.
 
-# Load environment variables
-load_dotenv()
+GLiNER (~80MB) is loaded once on first use and runs in milliseconds/chunk.
+Co-occurrence edges replace LLM-extracted relationships.
+"""
 
-class GraphExtractor:
-    def __init__(self):
-        self.api_key = os.getenv("GROQ_API_KEY")
-        if not self.api_key:
-            raise ValueError("GROQ_API_KEY environment variable not set.")
-        self.client = Groq(api_key=self.api_key)
-        self.model = "openai/gpt-oss-120b"
+from gliner import GLiNER
+from config import GLINER_MODEL, ACADEMIC_ENTITY_LABELS
+import itertools
 
-    def extract(self, text_chunk: str) -> dict:
-        """
-        Extracts entities and relationships from the given text chunk using Groq (openai/gpt-oss-120b).
-        Returns a Python dictionary with 'nodes' and 'relationships'.
-        """
-        system_prompt = (
-            "You are a precise Knowledge Graph Entity Extractor. "
-            "Your task is to analyze the input text and extract entities (nodes) and "
-            "relationships specific to the domain of the text.\n\n"
-            "Output MUST be strict JSON only. No conversational text, no markdown code blocks.\n"
-            "The JSON structure must be exactly:\n"
-            "{\n"
-            '  "nodes": [{"id": "Name", "label": "Type", "properties": {}}],\n'
-            '  "relationships": [{"source": "Name", "target": "Name", "type": "RELATION_TYPE", "properties": {}}]\n'
-            "}\n\n"
-            "Rules:\n"
-            "1. Nodes: 'id' should be the entity name. 'label' is the entity type (e.g., Person, Course, University).\n"
-            "2. Relationships: 'type' defines the link (e.g., TEACHES, LOCATED_AT).\n"
-            "3. Do not include duplicate nodes or relationships.\n"
-            "4. If no entities are found, return empty lists for nodes and relationships.\n"
-            "5. Ensure the JSON is valid."
-        )
+_ner_model: GLiNER = None
 
-        try:
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": text_chunk}
-                ],
-                temperature=0,  # Low temperature for deterministic output
-                stream=False,
-                response_format={"type": "json_object"} # Enforce JSON mode if supported, but prompt handles it too.
-            )
-            
-            response_content = completion.choices[0].message.content.strip()
-            
-            # Helper to parse JSON even if there's minor noise (though system prompt forbids it)
-            # The model usually respects the system prompt well.
-            try:
-                data = json.loads(response_content)
-                return data
-            except json.JSONDecodeError:
-                # Fallback: try to find the JSON block if wrapped in markdown
-                match = re.search(r'\{.*\}', response_content, re.DOTALL)
-                if match:
-                    return json.loads(match.group(0))
-                else:
-                    print(f"Error parsing JSON. Raw output: {response_content}")
-                    return {"nodes": [], "relationships": []}
 
-        except Exception as e:
-            print(f"Error during extraction: {e}")
-            return {"nodes": [], "relationships": []}
+def get_ner_model() -> GLiNER:
+    """Load model once, reuse forever. ~80MB, loads in ~3s on first call."""
+    global _ner_model
+    if _ner_model is None:
+        print(f"[GLiNER] Loading {GLINER_MODEL} — one-time download ~80MB...")
+        _ner_model = GLiNER.from_pretrained(GLINER_MODEL)
+        print("[GLiNER] Model loaded.")
+    return _ner_model
+
+
+def extract_entities(text: str) -> list[dict]:
+    """
+    Extract named entities from a single text chunk.
+    Returns: [{"text": str, "label": str}, ...]
+    Deduplicates by lowercased text.
+    """
+    model = get_ner_model()
+    raw = model.predict_entities(text, ACADEMIC_ENTITY_LABELS, threshold=0.5)
+    seen = {}
+    for e in raw:
+        key = e["text"].lower().strip()
+        if key and key not in seen:
+            seen[key] = {"text": key, "label": e["label"]}
+    return list(seen.values())
+
+
+def build_graph_data(
+    chunks: list[str],
+    doc_id: str,
+    workspace_id: str
+) -> tuple[list[dict], list[dict]]:
+    """
+    Process all chunks from one document.
+    Returns (nodes, edges) ready for neo4j_ops.upsert_graph.
+
+    Node schema:
+        id          : str  (lowercased entity text — stable key)
+        label       : str  (entity type from GLiNER)
+        workspace_id: str
+        doc_ids     : list[str]
+        frequency   : int
+
+    Edge schema:
+        source      : str  (node id)
+        target      : str  (node id)
+        relation    : str  ("co-occurs")
+        workspace_id: str
+        doc_ids     : list[str]
+        weight      : float (co-occurrence count, normalized later)
+    """
+    node_map: dict[str, dict] = {}
+    edge_map: dict[tuple, dict] = {}
+
+    for chunk_text in chunks:
+        entities = extract_entities(chunk_text)
+        entity_ids = [e["text"] for e in entities]
+
+        # Accumulate nodes
+        for e in entities:
+            nid = e["text"]
+            if nid not in node_map:
+                node_map[nid] = {
+                    "id": nid,
+                    "label": e["label"],
+                    "workspace_id": workspace_id,
+                    "doc_ids": [doc_id],
+                    "frequency": 1
+                }
+            else:
+                node_map[nid]["frequency"] += 1
+                if doc_id not in node_map[nid]["doc_ids"]:
+                    node_map[nid]["doc_ids"].append(doc_id)
+
+        # Co-occurrence edges: every pair of entities in this chunk
+        for a, b in itertools.combinations(entity_ids, 2):
+            key = (min(a, b), max(a, b))  # canonical undirected key
+            if key not in edge_map:
+                edge_map[key] = {
+                    "source": key[0],
+                    "target": key[1],
+                    "relation": "co-occurs",
+                    "workspace_id": workspace_id,
+                    "doc_ids": [doc_id],
+                    "weight": 1.0
+                }
+            else:
+                edge_map[key]["weight"] += 1.0
+                if doc_id not in edge_map[key]["doc_ids"]:
+                    edge_map[key]["doc_ids"].append(doc_id)
+
+    # Normalize edge weights to [0, 1]
+    if edge_map:
+        max_w = max(e["weight"] for e in edge_map.values())
+        for e in edge_map.values():
+            e["weight"] = round(e["weight"] / max_w, 4)
+
+    return list(node_map.values()), list(edge_map.values())

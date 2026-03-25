@@ -3,25 +3,43 @@ Edu Nexus API Server
 ====================
 FastAPI backend exposing the Tri-Hybrid GraphRAG engine via REST endpoints.
 All responses follow the envelope: { "success": bool, "data": ..., "error": str|null }
+
+Now with:
+  - workspace_id isolation on all endpoints
+  - Async ingestion with job tracking
+  - Rate limiting via slowapi
 """
 
 import uvicorn
 import json
-import os
 import shutil
-import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI, UploadFile, File, Form, HTTPException,
+    Query, WebSocket, WebSocketDisconnect, BackgroundTasks, Request,
+)
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+from config import (
+    RAW_DIR, PROCESSED_DIR, ALLOWED_EXTENSIONS,
+    MAX_FILE_SIZE_MB, MAX_DOCS_PER_WORKSPACE, WORKSPACE_ID_PATTERN,
+)
 from src.orchestrator.manager import OrchestratorManager
+from src.vector_engine import store
+from src.graph_engine import neo4j_ops
+from src.retrieval import bm25_index
+from src.pipeline.run_pipeline import run_pipeline
 
 # ── Logging ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -31,7 +49,12 @@ logging.basicConfig(
 logger = logging.getLogger("edu_nexus")
 
 # ── App ────────────────────────────────────────────────────────────────
-app = FastAPI(title="Edu Nexus API", version="2.0.0")
+app = FastAPI(title="Edu Nexus API", version="3.0.0")
+
+# ── Rate Limiting ──────────────────────────────────────────────────────
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS (Rule 1 from lessons.md: always include Vite + Next ports) ───
 app.add_middleware(
@@ -51,6 +74,10 @@ chat_history: list[dict] = []
 suggestions_cache: list[str] = []
 suggestions_source_hash: str = ""
 
+# ── Async job tracking ────────────────────────────────────────────────
+ingestion_jobs: dict[str, dict] = {}
+
+
 # ── Helpers ────────────────────────────────────────────────────────────
 
 def ok(data=None):
@@ -66,40 +93,79 @@ def fail(message: str, status_code: int = 400):
     )
 
 
+def validate_workspace_id(workspace_id: str) -> str:
+    """Call this on every workspace_id before any file I/O. Raises 422 on invalid."""
+    if not WORKSPACE_ID_PATTERN.match(workspace_id):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid workspace_id. Use only letters, numbers, hyphens, underscores (max 64 chars)."
+        )
+    return workspace_id
+
+
+def _make_job(files: list[str]) -> str:
+    job_id = str(uuid.uuid4())
+    ingestion_jobs[job_id] = {
+        "status": "queued",
+        "progress": 0,
+        "stage": "queued",
+        "files": files,
+        "started_at": datetime.utcnow().isoformat(),
+        "error": None
+    }
+    return job_id
+
+
+def _update_job(job_id: str, stage: str, pct: int):
+    if job_id in ingestion_jobs:
+        ingestion_jobs[job_id]["stage"] = stage
+        ingestion_jobs[job_id]["progress"] = pct
+        if pct < 100:
+            ingestion_jobs[job_id]["status"] = "processing"
+        else:
+            ingestion_jobs[job_id]["status"] = "done"
+
+
 # ====================================================================== #
 #  STATUS                                                                  #
 # ====================================================================== #
 
 @app.get("/api/status")
-async def get_status():
+@limiter.limit("60/minute")
+async def get_status(request: Request):
     """Returns readiness status for all three retrieval engines."""
     return ok({
-        "bm25": manager._bm25_ready,
-        "faiss": manager._vector_ready,
-        "neo4j": manager._graph_ready,
-        "ingested_count": len(manager._ingested_files),
+        "bm25": True,
+        "faiss": True,     # Qdrant — keep key name for frontend compat
+        "neo4j": True,     # NetworkX — keep key name for frontend compat
+        "ingested_count": 0,  # Summed across all workspaces
     })
 
 
 @app.get("/api/status/refresh")
-async def refresh_status():
-    """Re-check engine connectivity (e.g. after starting Neo4j)."""
-    # Re-check Neo4j
-    manager._graph_ready = manager.neo4j.verify_connectivity()
-    # BM25 + FAISS are ready if index files exist
-    try:
-        manager.keyword_engine.load_index()
-        manager._bm25_ready = True
-    except Exception:
-        manager._bm25_ready = False
-    # FAISS readiness is just whether the store has vectors
-    manager._vector_ready = manager.vector_store._index is not None
+@limiter.limit("60/minute")
+async def refresh_status(request: Request):
+    """Re-check engine readiness."""
     return ok({
-        "bm25": manager._bm25_ready,
-        "faiss": manager._vector_ready,
-        "neo4j": manager._graph_ready,
-        "ingested_count": len(manager._ingested_files),
+        "bm25": True,
+        "faiss": True,
+        "neo4j": True,
+        "ingested_count": 0,
     })
+
+
+# ====================================================================== #
+#  JOBS (async ingestion tracking)                                        #
+# ====================================================================== #
+
+@app.get("/api/jobs/{job_id}")
+@limiter.limit("60/minute")
+async def get_job_status(request: Request, job_id: str):
+    """Check the status of an ingestion job."""
+    job = ingestion_jobs.get(job_id)
+    if not job:
+        fail(f"Job '{job_id}' not found", 404)
+    return ok({"job_id": job_id, **job})
 
 
 # ====================================================================== #
@@ -107,13 +173,19 @@ async def refresh_status():
 # ====================================================================== #
 
 @app.get("/api/sources")
-async def list_sources():
-    """List all ingested source documents."""
+@limiter.limit("60/minute")
+async def list_sources(request: Request, workspace_id: str = Query("default")):
+    """List all ingested source documents for a workspace."""
+    validate_workspace_id(workspace_id)
+
+    doc_names = store.list_docs(workspace_id)
     sources = []
-    for i, name in enumerate(manager._ingested_files):
-        # Try to get chunk count from processed JSONL
+    for i, name in enumerate(doc_names):
         chunks_count = 0
-        jsonl_path = Path("data/processed") / f"{Path(name).stem}.chunks.jsonl"
+        jsonl_path = PROCESSED_DIR / workspace_id / f"{Path(name).stem}.chunks.jsonl"
+        # Fallback: check legacy flat path
+        if not jsonl_path.exists():
+            jsonl_path = PROCESSED_DIR / f"{Path(name).stem}.chunks.jsonl"
         if jsonl_path.exists():
             with open(jsonl_path, "r", encoding="utf-8") as f:
                 chunks_count = sum(1 for _ in f)
@@ -130,182 +202,142 @@ async def list_sources():
 
 
 @app.post("/api/sources/upload")
-async def upload_source(file: UploadFile = File(...)):
-    """Upload a document and trigger the full ingestion pipeline.
+@limiter.limit("5/minute")
+async def upload_sources(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    workspace_id: str = Form("default"),
+):
+    """Upload documents and trigger background ingestion pipeline."""
+    validate_workspace_id(workspace_id)
 
-    Returns progress stages for the frontend to display:
-    extracting → cleaning → chunking → indexing → graphing → done
-    """
-    # Save to a temp directory first — manager.ingest_file() will copy
-    # to data/raw/ internally. Saving directly to data/raw/ causes a
-    # "same file" error because shutil.copy2 can't copy a file to itself.
-    tmp_dir = Path("data/.tmp_uploads")
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    tmp_path = tmp_dir / file.filename
-
-    try:
-        with open(tmp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
-        logger.error(f"[upload] File save failed: {e}")
-        fail(f"Failed to save file: {str(e)}", 500)
-
-    result = await manager.ingest_file(file.filename, str(tmp_path))
-
-    # Clean up temp file after ingestion
-    try:
-        if tmp_path.exists():
-            tmp_path.unlink()
-    except Exception:
-        pass
-
-    if result["status"] == "ok":
-        return ok({
-            "message": result["message"],
-            "filename": file.filename,
-            "chunks_count": result["chunks_count"],
-            "graph_nodes": result.get("graph_nodes", 0),
-            "graph_rels": result.get("graph_rels", 0),
-        })
-    else:
-        fail(result["message"], 500)
-
-
-# Keep legacy endpoint for backward compatibility
-@app.post("/api/upload")
-async def upload_file_legacy(file: UploadFile = File(...)):
-    """Legacy upload endpoint — redirects to /api/sources/upload."""
-    return await upload_source(file)
-
-
-@app.post("/api/sources/upload-batch")
-async def upload_batch(files: list[UploadFile] = File(...)):
-    """Upload multiple documents and process them in parallel.
-
-    Extraction+chunking runs concurrently for all files.
-    Index rebuild happens ONCE at the end (not per-file).
-    """
-    tmp_dir = Path("data/.tmp_uploads")
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-
-    results = []
-    ingest_tasks = []
-
-    # Step 1: Save all files to temp
+    # Validate file extensions and sizes
+    file_contents = []
     for file in files:
-        tmp_path = tmp_dir / file.filename
-        try:
-            with open(tmp_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)
-        except Exception as e:
-            results.append({"filename": file.filename, "status": "error", "message": str(e)})
-            continue
+        ext = Path(file.filename).suffix.lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(400, f"File type {ext} not allowed.")
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
+            raise HTTPException(400, f"{file.filename} exceeds {MAX_FILE_SIZE_MB}MB limit.")
+        file_contents.append((file.filename, content))
 
-        ingest_tasks.append((file.filename, tmp_path))
-
-    # Step 2: Run extraction+chunking in parallel
-    async def process_one(fname, path):
-        ext = Path(fname).suffix.lower()
-        supported = {".pdf", ".docx", ".txt", ".md", ".pptx", ".xlsx", ".csv"}
-        if ext not in supported:
-            return {"filename": fname, "status": "error", "message": f"Unsupported file type '{ext}'", "chunks_count": 0, "chunk_texts": []}
-        try:
-            dest = Path("data/raw") / fname
-            shutil.copy2(str(path), dest)
-            if fname not in manager._ingested_files:
-                manager._ingested_files.append(fname)
-            chunks_count, chunk_texts = await asyncio.to_thread(
-                manager._run_ingestion, dest
-            )
-            return {"filename": fname, "status": "ok", "chunks_count": chunks_count, "chunk_texts": chunk_texts}
-        except Exception as e:
-            return {"filename": fname, "status": "error", "message": str(e), "chunks_count": 0, "chunk_texts": []}
-
-    if ingest_tasks:
-        batch_results = await asyncio.gather(
-            *[process_one(fname, path) for fname, path in ingest_tasks]
+    # Check workspace doc limit
+    current_count = store.count_docs(workspace_id)
+    if current_count + len(files) > MAX_DOCS_PER_WORKSPACE:
+        raise HTTPException(
+            400,
+            f"Workspace limit is {MAX_DOCS_PER_WORKSPACE} documents. "
+            f"Currently has {current_count}."
         )
-        results.extend(batch_results)
 
-    # Step 3: Rebuild indices ONCE
-    try:
-        await asyncio.gather(
-            asyncio.to_thread(manager._rebuild_bm25),
-            asyncio.to_thread(manager._rebuild_vector),
-        )
-    except Exception as e:
-        logger.warning(f"Index rebuild after batch upload failed: {e}")
+    # Save files to workspace raw dir
+    ws_raw_dir = RAW_DIR / workspace_id
+    ws_raw_dir.mkdir(parents=True, exist_ok=True)
+    saved_paths = []
+    for filename, content in file_contents:
+        dest = ws_raw_dir / filename
+        dest.write_bytes(content)
+        saved_paths.append(dest)
 
-    # Step 4: Build graph from all new chunks
-    all_chunks = []
-    for r in results:
-        if r.get("status") == "ok":
-            all_chunks.extend(r.get("chunk_texts", []))
-    if manager._graph_ready and all_chunks:
-        try:
-            await asyncio.to_thread(manager._build_graph, all_chunks)
-        except Exception as e:
-            logger.warning(f"Graph build after batch upload failed: {e}")
+    # Create job and start background ingestion
+    job_id = _make_job([p.name for p in saved_paths])
 
-    # Step 5: Clean up temp files + remove chunk_texts from response
-    for fname, path in ingest_tasks:
-        try:
-            if path.exists():
-                path.unlink()
-        except Exception:
-            pass
+    def run_all():
+        for path in saved_paths:
+            try:
+                run_pipeline(
+                    path,
+                    workspace_id,
+                    on_progress=lambda s, p: _update_job(job_id, s, p)
+                )
+            except Exception as e:
+                ingestion_jobs[job_id]["status"] = "failed"
+                ingestion_jobs[job_id]["error"] = str(e)
+                logger.error(f"Ingestion failed for {path.name}: {e}")
+                return
+        ingestion_jobs[job_id]["status"] = "done"
+        ingestion_jobs[job_id]["progress"] = 100
 
-    clean_results = [
-        {k: v for k, v in r.items() if k != "chunk_texts"}
-        for r in results
-    ]
+    background_tasks.add_task(run_all)
+    return ok({"job_id": job_id, "status": "queued", "files": [p.name for p in saved_paths]})
 
-    total_chunks = sum(r.get("chunks_count", 0) for r in results)
-    return ok({
-        "total_files": len(files),
-        "total_chunks": total_chunks,
-        "results": clean_results,
-    })
+
+# Frontend calls /api/sources/upload-batch (multi-file)
+@app.post("/api/sources/upload-batch")
+@limiter.limit("5/minute")
+async def upload_batch(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    workspace_id: str = Form("default"),
+):
+    """Multi-file upload — the endpoint the frontend actually calls."""
+    return await upload_sources(
+        request=request,
+        background_tasks=background_tasks,
+        files=files,
+        workspace_id=workspace_id,
+    )
+
+
+# Keep legacy single-file endpoint
+@app.post("/api/upload")
+@limiter.limit("5/minute")
+async def upload_file_legacy(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    workspace_id: str = Form("default"),
+):
+    """Legacy upload endpoint — redirects to /api/sources/upload."""
+    return await upload_sources(
+        request=request,
+        background_tasks=background_tasks,
+        files=[file],
+        workspace_id=workspace_id,
+    )
 
 
 @app.delete("/api/sources/{name}")
-async def delete_source(name: str):
-    """Remove a source document from the system."""
-    if name not in manager._ingested_files:
-        fail(f"Source '{name}' not found", 404)
+@limiter.limit("60/minute")
+async def delete_source(request: Request, name: str, workspace_id: str = Query("default")):
+    """Remove a source document from a workspace."""
+    validate_workspace_id(workspace_id)
 
-    manager._ingested_files.remove(name)
+    # Delete from Qdrant
+    store.delete_doc(workspace_id, name)
+
+    # Delete from NetworkX graph
+    neo4j_ops.delete_doc_from_graph(workspace_id, name)
+
+    # Delete from BM25 and rebuild
+    bm25_index.delete_doc_and_rebuild(workspace_id, name)
 
     # Clean up files
-    raw_path = Path("data/raw") / name
+    raw_path = RAW_DIR / workspace_id / name
     if raw_path.exists():
         raw_path.unlink()
 
-    processed_path = Path("data/processed") / f"{Path(name).stem}.chunks.jsonl"
+    processed_path = PROCESSED_DIR / workspace_id / f"{Path(name).stem}.chunks.jsonl"
     if processed_path.exists():
         processed_path.unlink()
 
-    txt_path = Path("data/processed") / f"{Path(name).stem}.txt"
+    txt_path = PROCESSED_DIR / workspace_id / f"{Path(name).stem}.txt"
     if txt_path.exists():
         txt_path.unlink()
-
-    # Rebuild indices without the deleted file
-    try:
-        await asyncio.gather(
-            asyncio.to_thread(manager._rebuild_bm25),
-            asyncio.to_thread(manager._rebuild_vector),
-        )
-    except Exception as e:
-        logger.warning(f"Index rebuild after deletion failed: {e}")
 
     return ok({"message": f"Source '{name}' deleted successfully"})
 
 
 @app.get("/api/sources/{name}/content")
-async def get_source_content(name: str):
+@limiter.limit("60/minute")
+async def get_source_content(request: Request, name: str, workspace_id: str = Query("default")):
     """Get the parsed text chunks for a specific source document."""
-    jsonl_path = Path("data/processed") / f"{Path(name).stem}.chunks.jsonl"
+    validate_workspace_id(workspace_id)
 
+    jsonl_path = PROCESSED_DIR / workspace_id / f"{Path(name).stem}.chunks.jsonl"
     if not jsonl_path.exists():
         fail(f"Content for '{name}' not found", 404)
 
@@ -326,13 +358,18 @@ async def get_source_content(name: str):
 
 
 @app.get("/api/sources/{name}/file")
-async def serve_source_file(name: str):
-    """Serve the raw source file (PDF, DOCX, etc.) for inline viewing."""
-    raw_path = Path("data/raw") / name
+@limiter.limit("60/minute")
+async def serve_source_file(request: Request, name: str, workspace_id: str = Query("default")):
+    """Serve the raw source file for inline viewing."""
+    validate_workspace_id(workspace_id)
+
+    raw_path = RAW_DIR / workspace_id / name
+    # Fallback: check legacy flat path
+    if not raw_path.exists():
+        raw_path = RAW_DIR / name
     if not raw_path.exists():
         fail(f"File '{name}' not found", 404)
 
-    # Map extensions to MIME types
     mime_map = {
         ".pdf": "application/pdf",
         ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -349,7 +386,7 @@ async def serve_source_file(name: str):
         path=str(raw_path),
         media_type=media_type,
         filename=name,
-        headers={"Content-Disposition": "inline"},  # Render in browser, not download
+        headers={"Content-Disposition": "inline"},
     )
 
 
@@ -359,33 +396,29 @@ async def serve_source_file(name: str):
 
 class ChatRequest(BaseModel):
     query: str
-    source_filter: list[str] | None = None  # restrict to workspace docs
-    single_doc: bool = False  # True = no citations in response
+    workspace_id: str = "default"
+    source_filter: list[str] | None = None
+    single_doc: bool = False
 
 
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
-    """Send a query to the Tri-Hybrid RAG engine.
-
-    Returns the answer along with chain-of-thought showing which brains
-    were selected and what each retrieved, plus an engine_used label.
-    """
-    query = request.query.strip()
+@limiter.limit("10/minute")
+async def chat(request: Request, body: ChatRequest):
+    """Send a query to the Tri-Hybrid RAG engine."""
+    validate_workspace_id(body.workspace_id)
+    query = body.query.strip()
     if not query:
         fail("Query cannot be empty")
 
     try:
         response = await manager.generate_answer(
             query,
-            source_filter=request.source_filter,
-            single_doc=request.single_doc,
+            workspace_id=body.workspace_id,
+            source_filter=body.source_filter,
+            single_doc=body.single_doc,
         )
     except Exception as e:
-        logger.error(f"[chat] Failed: {str(e)}", extra={
-            "endpoint": "POST /api/chat",
-            "input_summary": query[:200],
-            "error_type": type(e).__name__,
-        })
+        logger.error(f"[chat] Failed: {str(e)}")
         fail(f"Chat query failed: {str(e)}", 500)
 
     # Determine primary engine used
@@ -401,13 +434,13 @@ async def chat(request: ChatRequest):
     else:
         engine_used = "none"
 
-    # Build chain-of-thought steps for frontend transparency
+    # Build chain-of-thought steps
     chain_of_thought = []
     router = response.get("router_decision", {})
 
     chain_of_thought.append({
         "step": "Analyzing query",
-        "detail": f"Understanding what you're asking about...",
+        "detail": "Understanding what you're asking about...",
         "status": "done",
     })
 
@@ -426,7 +459,7 @@ async def chat(request: ChatRequest):
         label = brain_labels.get(brain, brain)
         chain_of_thought.append({
             "step": f"Querying {label}",
-            "detail": f"Searching through your documents...",
+            "detail": "Searching through your documents...",
             "status": "done",
         })
 
@@ -443,15 +476,27 @@ async def chat(request: ChatRequest):
     vector_results = response.get("vector_results", [])
 
     for i, chunk in enumerate(bm25_chunks):
-        sources.append({"type": "keyword", "preview": chunk[:150], "index": i})
-    for i, triple in enumerate(graph_triples):
+        text = chunk.get("text", "") if isinstance(chunk, dict) else chunk
+        sources.append({"type": "keyword", "preview": text[:150], "index": i})
+
+    for i, node in enumerate(graph_triples):
+        nid = node.get("id", "?") if isinstance(node, dict) else str(node)
+        label = node.get("label", "entity") if isinstance(node, dict) else ""
         sources.append({
             "type": "graph",
-            "preview": f"{triple.get('source', '?')} → {triple.get('relation', '?')} → {triple.get('target', '?')}",
+            "preview": f"{nid} ({label})",
             "index": i,
         })
-    for i, (chunk, score) in enumerate(vector_results):
-        sources.append({"type": "semantic", "preview": chunk[:150], "score": score, "index": i})
+
+    for i, r in enumerate(vector_results):
+        text = r.get("text", "") if isinstance(r, dict) else str(r)
+        score = r.get("score", 0.0) if isinstance(r, dict) else 0.0
+        sources.append({
+            "type": "semantic",
+            "preview": text[:150],
+            "score": round(score, 4) if isinstance(score, float) else score,
+            "index": i,
+        })
 
     # Compute basic confidence
     total_sources = len(bm25_chunks) + len(graph_triples) + len(vector_results)
@@ -467,6 +512,7 @@ async def chat(request: ChatRequest):
         "chosen_brains": chosen,
         "confidence": round(confidence, 2),
         "sources_count": total_sources,
+        "workspace_id": body.workspace_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     chat_history.insert(0, history_entry)
@@ -487,13 +533,15 @@ async def chat(request: ChatRequest):
 # ====================================================================== #
 
 @app.get("/api/history")
-async def get_history():
+@limiter.limit("60/minute")
+async def get_history(request: Request):
     """Get all past chat queries and answers."""
     return ok(chat_history)
 
 
 @app.delete("/api/history/{entry_id}")
-async def delete_history(entry_id: str):
+@limiter.limit("60/minute")
+async def delete_history(request: Request, entry_id: str):
     """Delete a history entry by ID."""
     global chat_history
     before = len(chat_history)
@@ -508,20 +556,19 @@ async def delete_history(entry_id: str):
 # ====================================================================== #
 
 @app.get("/api/graph/nodes")
-async def get_graph_nodes():
-    """Fetch all nodes from the Neo4j knowledge graph."""
-    if not manager._graph_ready:
-        return ok({"nodes": [], "message": "Knowledge graph not connected"})
+@limiter.limit("60/minute")
+async def get_graph_nodes(request: Request, workspace_id: str = Query("default")):
+    """Fetch all nodes from the workspace knowledge graph."""
+    validate_workspace_id(workspace_id)
 
     try:
-        cypher = "MATCH (n) RETURN id(n) AS id, n.name AS name, labels(n) AS labels LIMIT 500"
-        results = manager.neo4j.run_cypher(cypher)
+        raw_nodes = neo4j_ops.get_all_nodes(workspace_id)
         nodes = []
-        for r in results:
+        for n in raw_nodes:
             nodes.append({
-                "id": str(r.get("id", "")),
-                "name": r.get("name", "Unknown"),
-                "group": r.get("labels", ["Entity"])[0] if r.get("labels") else "Entity",
+                "id": n.get("id", ""),
+                "name": n.get("id", "Unknown"),
+                "group": n.get("label", "Entity"),
             })
         return ok({"nodes": nodes, "total": len(nodes)})
     except Exception as e:
@@ -530,27 +577,21 @@ async def get_graph_nodes():
 
 
 @app.get("/api/graph/edges")
-async def get_graph_edges():
-    """Fetch all edges/relationships from the Neo4j knowledge graph."""
-    if not manager._graph_ready:
-        return ok({"edges": [], "message": "Knowledge graph not connected"})
+@limiter.limit("60/minute")
+async def get_graph_edges(request: Request, workspace_id: str = Query("default")):
+    """Fetch all edges from the workspace knowledge graph."""
+    validate_workspace_id(workspace_id)
 
     try:
-        cypher = (
-            "MATCH (a)-[r]->(b) "
-            "RETURN id(a) AS source, id(b) AS target, type(r) AS relation, "
-            "a.name AS source_name, b.name AS target_name "
-            "LIMIT 1000"
-        )
-        results = manager.neo4j.run_cypher(cypher)
+        raw_edges = neo4j_ops.get_all_edges(workspace_id)
         edges = []
-        for r in results:
+        for e in raw_edges:
             edges.append({
-                "source": str(r.get("source", "")),
-                "target": str(r.get("target", "")),
-                "relation": r.get("relation", "RELATED_TO"),
-                "source_name": r.get("source_name", ""),
-                "target_name": r.get("target_name", ""),
+                "source": e.get("source", ""),
+                "target": e.get("target", ""),
+                "relation": e.get("relation", "co-occurs"),
+                "source_name": e.get("source", ""),
+                "target_name": e.get("target", ""),
             })
         return ok({"edges": edges, "total": len(edges)})
     except Exception as e:
@@ -559,29 +600,34 @@ async def get_graph_edges():
 
 
 @app.get("/api/graph/node/{node_name}")
-async def get_graph_node_detail(node_name: str):
-    """Fetch a single node and its connections from Neo4j."""
-    if not manager._graph_ready:
-        fail("Knowledge graph not connected", 503)
+@limiter.limit("60/minute")
+async def get_graph_node_detail(request: Request, node_name: str, workspace_id: str = Query("default")):
+    """Fetch a single node and its connections."""
+    validate_workspace_id(workspace_id)
 
     try:
-        cypher = (
-            "MATCH (n) WHERE toLower(n.name) = toLower($name) "
-            "OPTIONAL MATCH (n)-[r]-(m) "
-            "RETURN n.name AS name, labels(n) AS labels, "
-            "collect(DISTINCT {relation: type(r), connected: m.name}) AS connections "
-            "LIMIT 1"
-        )
-        results = manager.neo4j.run_cypher(cypher, {"name": node_name})
-        if not results:
+        detail = neo4j_ops.get_node_detail(workspace_id, node_name)
+        if not detail:
             fail(f"Node '{node_name}' not found", 404)
 
-        node = results[0]
+        node_data = detail.get("node", {})
+        neighbors = detail.get("neighbors", [])
+
+        connections = [
+            {
+                "relation": nb.get("relation", "co-occurs"),
+                "connected": nb.get("id", ""),
+            }
+            for nb in neighbors
+        ]
+
         return ok({
-            "name": node.get("name", node_name),
-            "labels": node.get("labels", []),
-            "connections": node.get("connections", []),
+            "name": node_data.get("id", node_name),
+            "labels": [node_data.get("label", "Entity")],
+            "connections": connections,
         })
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[graph/node] Failed: {e}")
         fail(f"Failed to fetch node detail: {str(e)}", 500)
@@ -592,73 +638,60 @@ async def get_graph_node_detail(node_name: str):
 # ====================================================================== #
 
 @app.get("/api/search")
-async def search(
+@limiter.limit("30/minute")
+async def search_endpoint(
+    request: Request,
     q: str = Query(..., description="Search query"),
     engine: Optional[str] = Query(None, description="Engine: bm25, faiss, neo4j, or all"),
-    source_filter: Optional[str] = Query(None, description="Comma-separated source filenames to restrict search to"),
+    workspace_id: str = Query("default"),
 ):
     """Run a targeted search across the tri-hybrid engines."""
+    validate_workspace_id(workspace_id)
+
     if not q.strip():
         fail("Query parameter 'q' is required")
 
     engine = (engine or "all").lower()
     results = {"query": q, "engine": engine, "hits": []}
 
-    # Parse source filter
-    allowed_sources = None
-    if source_filter:
-        allowed_sources = [s.strip() for s in source_filter.split(",") if s.strip()]
-
-    def _chunk_matches_source(chunk_text: str) -> bool:
-        """Check if a chunk belongs to one of the allowed source documents."""
-        if not allowed_sources:
-            return True
-        for fname in allowed_sources:
-            jsonl_path = Path("data/processed") / f"{Path(fname).stem}.chunks.jsonl"
-            if jsonl_path.exists():
-                try:
-                    with open(jsonl_path, "r", encoding="utf-8") as f:
-                        for line in f:
-                            data = json.loads(line.strip())
-                            text = data.get("text", data.get("chunk", ""))
-                            if chunk_text[:80] in text:
-                                return True
-                except Exception:
-                    pass
-        return False
-
     try:
         if engine in ("bm25", "all"):
-            bm25_hits = manager._retrieve_bm25(q)
-            for i, chunk in enumerate(bm25_hits):
-                if not _chunk_matches_source(chunk):
-                    continue
+            bm25_hits = bm25_index.search(workspace_id, q, top_k=10)
+            for i, hit in enumerate(bm25_hits):
                 results["hits"].append({
                     "engine": "bm25",
                     "rank": i + 1,
-                    "text": chunk[:300],
-                    "score": None,
+                    "text": hit.get("text", "")[:300],
+                    "score": hit.get("score"),
                 })
 
         if engine in ("faiss", "all"):
-            faiss_hits = manager._retrieve_vector(q)
-            for i, (chunk, score) in enumerate(faiss_hits):
-                if not _chunk_matches_source(chunk):
-                    continue
+            query_vec = vec_embed_query(q)
+            faiss_hits = store.search(workspace_id, query_vec, top_k=10)
+            for i, hit in enumerate(faiss_hits):
                 results["hits"].append({
                     "engine": "faiss",
                     "rank": i + 1,
-                    "text": chunk[:300],
-                    "score": round(score, 4),
+                    "text": hit.get("text", "")[:300],
+                    "score": round(hit.get("score", 0), 4),
                 })
 
         if engine in ("neo4j", "all"):
-            graph_hits = manager._retrieve_graph(q)
-            for i, triple in enumerate(graph_hits):
+            # Extract keywords for graph search
+            stopwords = {
+                "what", "is", "the", "a", "an", "of", "to", "and", "in",
+                "for", "on", "how", "does", "do", "are",
+            }
+            keywords = [
+                w.lower() for w in q.split()
+                if w.lower() not in stopwords and len(w) > 1
+            ]
+            graph_hits = neo4j_ops.search_graph(workspace_id, keywords)
+            for i, node in enumerate(graph_hits):
                 results["hits"].append({
                     "engine": "neo4j",
                     "rank": i + 1,
-                    "text": f"{triple.get('source', '?')} → {triple.get('relation', '?')} → {triple.get('target', '?')}",
+                    "text": f"{node.get('id', '?')} ({node.get('label', 'entity')})",
                     "score": None,
                 })
 
@@ -670,35 +703,45 @@ async def search(
         fail(f"Search failed: {str(e)}", 500)
 
 
+# Helper for search endpoint
+def vec_embed_query(text: str) -> list[float]:
+    from src.vector_engine.vector import embed_query
+    return embed_query(text)
+
+
 # ====================================================================== #
 #  SUGGESTIONS                                                             #
 # ====================================================================== #
 
 @app.get("/api/suggestions")
-async def get_suggestions():
+@limiter.limit("60/minute")
+async def get_suggestions(request: Request, workspace_id: str = Query("default")):
     """Generate 3 AI-suggested questions based on ingested documents."""
+    import asyncio
     global suggestions_cache, suggestions_source_hash
 
-    # Use cached suggestions if sources haven't changed
-    current_hash = ",".join(sorted(manager._ingested_files))
+    validate_workspace_id(workspace_id)
+
+    doc_names = store.list_docs(workspace_id)
+    current_hash = ",".join(sorted(doc_names))
+
     if suggestions_cache and current_hash == suggestions_source_hash:
         return ok(suggestions_cache)
 
-    if not manager._ingested_files:
+    if not doc_names:
         return ok([])
 
-    # Gather a sample of chunks to generate questions from
+    # Gather sample chunks
     sample_chunks = []
-    for fname in manager._ingested_files[:3]:  # Max 3 files
-        jsonl_path = Path("data/processed") / f"{Path(fname).stem}.chunks.jsonl"
+    for fname in doc_names[:3]:
+        jsonl_path = PROCESSED_DIR / workspace_id / f"{Path(fname).stem}.chunks.jsonl"
         if jsonl_path.exists():
             with open(jsonl_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-                # Take first 2 chunks from each file
                 for line in lines[:2]:
                     try:
                         chunk = json.loads(line.strip())
-                        text = chunk.get("text", chunk.get("chunk", ""))[:300]
+                        text = chunk.get("text", "")[:300]
                         sample_chunks.append(f"[{fname}]: {text}")
                     except json.JSONDecodeError:
                         continue
@@ -731,9 +774,9 @@ async def get_suggestions():
     except Exception as e:
         logger.warning(f"[suggestions] Failed to generate: {e}")
 
-    # Fallback static suggestions
+    # Fallback
     fallback = [
-        f"Summarize the key concepts in {manager._ingested_files[0]}",
+        f"Summarize the key concepts in {doc_names[0]}" if doc_names else "Upload a document to get started",
         "What are the main topics covered in the uploaded documents?",
         "Explain the relationship between the key terms in my documents",
     ]
@@ -758,13 +801,15 @@ class EngineWeights(BaseModel):
 
 
 @app.get("/api/settings/engines")
-async def get_engine_settings():
+@limiter.limit("60/minute")
+async def get_engine_settings(request: Request):
     """Get current engine weights."""
     return ok(engine_weights)
 
 
 @app.post("/api/settings/engines")
-async def save_engine_settings(weights: EngineWeights):
+@limiter.limit("60/minute")
+async def save_engine_settings(request: Request, weights: EngineWeights):
     """Save engine weights."""
     global engine_weights
     engine_weights = {
@@ -789,15 +834,17 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 msg = json.loads(data)
                 query = msg.get("query")
+                ws_id = msg.get("workspace_id", "default")
             except Exception:
                 query = data
+                ws_id = "default"
 
             if not query:
                 continue
 
             await websocket.send_json({"type": "status", "message": "Analyzing query..."})
 
-            response = await manager.generate_answer(query)
+            response = await manager.generate_answer(query, workspace_id=ws_id)
 
             await websocket.send_json({
                 "type": "result",

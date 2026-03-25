@@ -1,143 +1,102 @@
-import sys
-import os
-import re
-from pathlib import Path
+"""
+Ingestion Pipeline — Edu Nexus
+=================================
+End-to-end ingestion: extract → clean → chunk → embed → index → graph.
+All stages are workspace-scoped. Supports progress callbacks for async job tracking.
+"""
+
 import json
-from datetime import datetime
-from docx import Document
+import importlib.util
+import logging
+from pathlib import Path
 
-# Add 'src' to sys.path to allow imports from sibling modules
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from config import PROCESSED_DIR
+from src.ingest.extractor import extract_text
+from src.vector_engine import vector as vec
+from src.vector_engine import store
+from src.retrieval import bm25_index
+from src.graph_engine.extractor import build_graph_data
+from src.graph_engine.neo4j_ops import upsert_graph
 
-from ingest.ocr import OCR
-
-
-class UniversalConverter:
-
-    def __init__(self, db_root: Path):
-        self.db_root = db_root
-        self.raw = db_root / "raw"
-        self.intermediate = db_root / "intermediate"
-        self.normalized = db_root / "normalized"
-        self.metadata_file = db_root / "metadata" / "processing_log.json"
-
-        self.ocr = OCR()
-
-        (self.intermediate / "ocr_text").mkdir(parents=True, exist_ok=True)
-        (self.normalized / "docx").mkdir(parents=True, exist_ok=True)
-        (self.db_root / "metadata").mkdir(parents=True, exist_ok=True)
-
-    # ---------------- IMAGE PROCESSING ----------------
-    def process_images(self):
-        folder = self.raw / "images"
-
-        for img in folder.glob("*"):
-            print(f"[IMAGE OCR] {img.name}")
-
-            text = self.ocr.image_to_text(str(img))
-            self.save_outputs(img.stem, text)
-
-    # ---------------- PDF PROCESSING ----------------
-    def process_pdfs(self):
-        import fitz  # PyMuPDF
-
-        folder = self.raw / "pdf"
-
-        for pdf in folder.glob("*.pdf"):
-            print(f"[PDF] {pdf.name}")
-            text = ""
-
-            doc = fitz.open(pdf)
-            for page in doc:
-                page_text = page.get_text()
-                text += page_text
-
-            if len(text.strip()) < 50:
-                print(" → OCR fallback")
-                # Convert pages to images
-                for i, page in enumerate(doc):
-                    pix = page.get_pixmap()
-                    img_path = self.intermediate / f"{pdf.stem}_{i}.png"
-                    pix.save(img_path)
-
-                    text += self.ocr.image_to_text(str(img_path))
-
-            self.save_outputs(pdf.stem, text)
-
-    # ---------------- PPT PROCESSING ----------------
-    def process_ppts(self):
-        from pptx import Presentation
-
-        folder = self.raw / "ppt"
-
-        for ppt in folder.glob("*.pptx"):
-            print(f"[PPT] {ppt.name}")
-            text = ""
-
-            prs = Presentation(ppt)
-            for slide in prs.slides:
-                for shape in slide.shapes:
-                    if hasattr(shape, "text"):
-                        text += shape.text + "\n"
-
-            self.save_outputs(ppt.stem, text)
-
-    # ---------------- SAVE OUTPUT ----------------
-    def save_outputs(self, name, text):
-        # 1. Define illegal XML characters (Control characters except \n, \r, \t)
-        # This regex matches characters that are NOT allowed in XML 1.0
-        illegal_xml_chars = re.compile(
-            r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x84\x86-\x9f]"
-        )
-        
-        # 2. Efficiently remove them
-        clean_text = illegal_xml_chars.sub("", text)
-
-        # 3. Save as TXT
-        txt_path = self.intermediate / "ocr_text" / f"{name}.txt"
-        with open(txt_path, "w", encoding="utf-8") as f:
-            f.write(clean_text)
-
-        # 4. Save as DOCX
-        doc = Document()
-        # If the text is massive, we add it in one go
-        doc.add_paragraph(clean_text)
-        doc.save(self.normalized / "docx" / f"{name}.docx")
-
-        self.update_metadata(name)
-
-    # ---------------- METADATA ----------------
-    def update_metadata(self, filename):
-        if self.metadata_file.exists():
-            try:
-                with open(self.metadata_file, "r", encoding="utf-8") as f:
-                    metadata = json.load(f)
-            except json.JSONDecodeError:
-                metadata = []
-        else:
-            metadata = []
-
-        metadata.append({
-            "file_name": filename,
-            "status": "processed",
-            "timestamp": datetime.now().isoformat()
-        })
-
-        with open(self.metadata_file, "w", encoding="utf-8") as f:
-            json.dump(metadata, f, indent=4)
-
-    # ---------------- RUN ALL ----------------
-    def run_all(self):
-        self.process_images()
-        self.process_pdfs()
-        self.process_ppts()
+logger = logging.getLogger("Pipeline")
 
 
-if __name__ == "__main__":
-    repo_root = Path(__file__).resolve().parents[2]
-    db_root = repo_root.parent / "edu_nexus_db"
+def run_pipeline(
+    file_path: Path,
+    workspace_id: str,
+    on_progress: callable = None,
+) -> dict:
+    """
+    Full ingestion pipeline for one file.
+    Calls on_progress at each stage if provided.
+    Returns {"status": "ok", "chunks": int} or raises on error.
+    """
 
-    pipeline = UniversalConverter(db_root)
-    pipeline.run_all()
+    def progress(stage: str, pct: int):
+        if on_progress:
+            on_progress(stage, pct)
 
-    print("✅ Universal pipeline completed")
+    # ── Extract text ──────────────────────────────────────────────
+    progress("extracting text", 5)
+    pages = extract_text(file_path)
+    if not pages:
+        raise ValueError(f"No text extracted from {file_path.name}")
+
+    # ── Clean ─────────────────────────────────────────────────────
+    progress("cleaning", 15)
+    cleaner_path = Path(__file__).parent.parent / "ingest" / "cleaner.py"
+    spec = importlib.util.spec_from_file_location("cleaner", cleaner_path)
+    cleaner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cleaner)
+
+    cleaned_text = cleaner.clean_pages(pages, source_type="pdf")
+    basename = file_path.stem
+
+    # ── Chunk ─────────────────────────────────────────────────────
+    progress("chunking", 25)
+    chunks = cleaner.chunk_text_by_sentences(
+        cleaned_text, max_tokens=500, overlap=100
+    )
+    chunk_texts = [text for (_, _, text) in chunks]
+
+    if not chunk_texts:
+        raise ValueError(f"No chunks produced from {file_path.name}")
+
+    # ── Embed ─────────────────────────────────────────────────────
+    progress("embedding", 40)
+    embeddings = vec.embed_chunks(chunk_texts)
+
+    # ── Index vectors (Qdrant) ────────────────────────────────────
+    progress("indexing vectors", 60)
+    store.add_chunks(workspace_id, file_path.name, chunk_texts, embeddings)
+
+    # ── BM25 index ────────────────────────────────────────────────
+    progress("building BM25 index", 72)
+    bm25_index.add_doc_chunks(workspace_id, chunk_texts)
+
+    # ── Graph entities (GLiNER — local, no API calls) ─────────────
+    progress("extracting graph entities", 82)
+    nodes, edges = build_graph_data(chunk_texts, file_path.name, workspace_id)
+
+    progress("building graph", 94)
+    upsert_graph(workspace_id, nodes, edges)
+
+    # ── Save processed chunks to disk ─────────────────────────────
+    out_dir = PROCESSED_DIR / workspace_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{basename}.chunks.jsonl"
+    with open(out_path, "w", encoding="utf-8") as f:
+        for i, chunk in enumerate(chunk_texts):
+            f.write(json.dumps({
+                "doc_id": file_path.name,
+                "chunk_index": i,
+                "text": chunk,
+                "source": file_path.name,
+            }) + "\n")
+
+    # Also write cleaned text file
+    cleaner.write_cleaned_text(out_dir, basename, cleaned_text)
+
+    progress("done", 100)
+    logger.info(f"Pipeline complete: {file_path.name} → {len(chunk_texts)} chunks")
+    return {"status": "ok", "chunks": len(chunk_texts)}

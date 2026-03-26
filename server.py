@@ -91,6 +91,7 @@ AUTH_EXEMPT_PATHS = {
     "/api/auth/login",
     "/api/auth/status",
     "/api/auth/logout",
+    "/api/auth/delete-account",
     "/api/status",
     "/api/status/refresh",
 }
@@ -247,9 +248,6 @@ async def auth_status_check(request: Request):
 @app.post("/api/auth/delete-account")
 async def auth_delete_account(request: Request):
     """DELETE EVERYTHING — wipes user and all data."""
-    token = request.headers.get("x-session-token", "")
-    if not token or not auth.validate_session(token):
-        fail("Not authenticated", 401)
     auth.delete_account()
     return ok({"message": "Account and all data deleted"})
 

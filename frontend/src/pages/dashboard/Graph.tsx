@@ -7,7 +7,7 @@ import GlassCard from '@/components/common/GlassCard'
 import { getGraphNodes, getGraphEdges, getGraphNodeDetail, type GraphNode, type GraphEdge, type NodeDetail } from '@/lib/api'
 
 /**
- * Neo4j Aura–style full-screen graph with layout switcher.
+ * Graph explorer with improved labeling and meaningful connections.
  * Layouts: Force (default), Radial, Hierarchical, Grid
  */
 
@@ -499,8 +499,9 @@ export default function Graph() {
               <line
                 key={i}
                 x1={e.sx} y1={e.sy} x2={e.tx} y2={e.ty}
-                stroke="rgba(255,255,255,0.25)"
-                strokeWidth={1.5}
+                stroke="rgba(255,255,255,0.15)"
+                strokeWidth={1 + (e.weight || 0) * 1.5}
+                strokeOpacity={0.3 + (e.weight || 0) * 0.5}
               />
             ))}
 
@@ -524,11 +525,11 @@ export default function Graph() {
                   {showLabel && (
                     <text
                       x={node.x} y={node.y + node.radius + 14}
-                      textAnchor="middle" fill="rgba(255,255,255,0.5)" fontSize="9"
-                      fontFamily="'Inter', sans-serif" fontWeight="500"
+                      textAnchor="middle" fill="rgba(255,255,255,0.7)" fontSize="10"
+                      fontFamily="'Inter', sans-serif" fontWeight="600"
                       style={{ pointerEvents: 'none' }}
                     >
-                      {node.name.length > 18 ? node.name.slice(0, 16) + '…' : node.name}
+                      {node.name.length > 20 ? node.name.slice(0, 18) + '…' : node.name}
                     </text>
                   )}
                 </g>
@@ -578,10 +579,12 @@ export default function Graph() {
                         const node = simNodes.find((n) => n.name === conn.connected)
                         if (node) handleNodeClick(node)
                       }}
-                      className="text-left text-sm group p-2 rounded-lg hover:bg-white/[0.04] transition-colors"
+                      className="text-left text-sm group p-3 rounded-xl hover:bg-white/[0.06] transition-colors border border-transparent hover:border-white/[0.08]"
                     >
-                      <span className="text-white/30 text-[11px] block">{conn.relation}</span>
-                      <span className="text-cyan-400 group-hover:text-cyan-300 font-medium">{conn.connected}</span>
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-accent-cyan/10 text-accent-cyan/80 border border-accent-cyan/20">
+                        {conn.relation}
+                      </span>
+                      <span className="text-white group-hover:text-cyan-300 font-medium block mt-1.5 text-sm">{conn.connected}</span>
                     </button>
                   ))}
                   {nodeDetail.connections.length === 0 && (

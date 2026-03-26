@@ -4,6 +4,7 @@ import { ChevronRight, ChevronLeft, Send, Sparkles, FileText, Loader2, AlertCirc
 import { useQuery, useMutation } from '@tanstack/react-query'
 import PageTransition from '@/components/common/PageTransition'
 import GlassCard from '@/components/common/GlassCard'
+import MarkdownMessage from '@/components/common/MarkdownMessage'
 import { getSourceContent, getSourceFileUrl, sendChat, type ChunkData, type ChatResponse } from '@/lib/api'
 
 export default function Viewer() {
@@ -238,13 +239,15 @@ export default function Viewer() {
                     <Sparkles className="text-accent-cyan" size={12} />
                   </div>
                 )}
-                <div className={
-                  msg.role === 'user'
-                    ? 'bg-gradient-to-br from-accent-cyan to-accent-purple text-white px-4 py-2.5 rounded-[12px] rounded-br-[4px] text-xs max-w-[80%]'
-                    : 'glass-card px-4 py-2.5 rounded-[12px] rounded-bl-[4px] text-xs text-white/90 max-w-[80%] whitespace-pre-line'
-                }>
-                  {msg.text}
-                </div>
+                {msg.role === 'user' ? (
+                  <div className="bg-gradient-to-br from-accent-cyan to-accent-purple text-white px-4 py-2.5 rounded-[12px] rounded-br-[4px] text-xs max-w-[80%]">
+                    {msg.text}
+                  </div>
+                ) : (
+                  <div className="glass-card px-4 py-3 rounded-[12px] rounded-bl-[4px] max-w-[85%]">
+                    <MarkdownMessage content={msg.text} className="text-xs" />
+                  </div>
+                )}
               </div>
             ))}
             {chatMutation.isPending && (

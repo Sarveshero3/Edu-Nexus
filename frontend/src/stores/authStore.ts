@@ -53,12 +53,16 @@ export const useAuth = create<AuthState>()(
       signUp: async (name: string, email: string, _password: string) => {
         set({ isLoading: true })
         await new Promise((r) => setTimeout(r, 800))
+        const userId = btoa(email).slice(0, 12) // deterministic unique ID from email
         const user: User = {
-          id: '1',
+          id: userId,
           name,
           email,
           memberSince: new Date().toISOString(),
         }
+        // Always clear workspace data on fresh signup — clean slate
+        localStorage.removeItem('edu-nexus-workspaces')
+        localStorage.setItem('edu-nexus-last-user', userId)
         set({ user, token: 'mock-jwt-token', isLoading: false })
       },
 

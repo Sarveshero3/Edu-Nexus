@@ -4,6 +4,7 @@ import { Send, Sparkles, ChevronDown, RefreshCw, Lightbulb } from 'lucide-react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import PageTransition from '@/components/common/PageTransition'
 import EngineBadge from '@/components/common/EngineBadge'
+import MarkdownMessage from '@/components/common/MarkdownMessage'
 import { sendChat, getStatus, refreshStatus, getSuggestions, type ChatResponse, type ChainOfThoughtStep, type EngineStatus } from '@/lib/api'
 import { useWorkspace, type Message } from '@/stores/workspaceStore'
 
@@ -136,8 +137,8 @@ export default function Chat() {
           {/* Engine status indicators */}
           <div className="flex items-center gap-3">
             <EngineStatusDot label="BM25" ready={status?.bm25} />
-            <EngineStatusDot label="FAISS" ready={status?.faiss} />
-            <EngineStatusDot label="Neo4j" ready={status?.neo4j} />
+            <EngineStatusDot label="Qdrant" ready={status?.vector} />
+            <EngineStatusDot label="Graph" ready={status?.graph} />
           </div>
           <button
             onClick={handleRefreshStatus}
@@ -160,7 +161,7 @@ export default function Chat() {
               </div>
               <h2 className="text-xl text-white font-semibold mb-2">How can I help?</h2>
               <p className="text-text-muted text-sm max-w-md">
-                Ask questions about your uploaded documents. I'll search through BM25, FAISS, and Neo4j to find the best answers.
+                Ask questions about your uploaded documents. I'll search through BM25, Qdrant, and the Knowledge Graph to find the best answers.
               </p>
             </div>
             {/* Suggested questions */}
@@ -196,16 +197,16 @@ export default function Chat() {
                 <Sparkles className="text-accent-cyan" size={14} />
               </div>
             )}
-            <div className="max-w-xl">
-              <div
-                className={
-                  msg.role === 'user'
-                    ? 'bg-gradient-to-br from-accent-cyan to-accent-purple text-white px-5 py-3 rounded-[16px] rounded-br-[4px] text-sm'
-                    : 'glass-card px-5 py-3 rounded-[16px] rounded-bl-[4px] text-sm text-white/90 whitespace-pre-line'
-                }
-              >
-                {msg.content}
-              </div>
+            <div className="max-w-2xl">
+              {msg.role === 'user' ? (
+                <div className="bg-gradient-to-br from-accent-cyan to-accent-purple text-white px-5 py-3 rounded-[16px] rounded-br-[4px] text-sm">
+                  {msg.content}
+                </div>
+              ) : (
+                <div className="glass-card px-5 py-4 rounded-[16px] rounded-bl-[4px]">
+                  <MarkdownMessage content={msg.content} />
+                </div>
+              )}
 
               {/* Engine badge + confidence */}
               {msg.role === 'assistant' && msg.engine_used && (

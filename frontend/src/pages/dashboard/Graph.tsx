@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ZoomIn, ZoomOut, Maximize2, X, Loader2, AlertCircle, Share2, LayoutGrid } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize2, X, Loader2, AlertCircle, Share2, LayoutGrid, SlidersHorizontal } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import PageTransition from '@/components/common/PageTransition'
 import GlassCard from '@/components/common/GlassCard'
@@ -149,7 +149,7 @@ function applyLayout(
     x: cx + (Math.random() - 0.5) * spread,
     y: cy + (Math.random() - 0.5) * spread,
     vx: 0, vy: 0,
-    radius: Math.max(6, Math.min(18, 6 + n.name.length * 0.4)),
+    radius: Math.max(6, Math.min(18, 6 + (n.frequency || 1) * 1.5)),
   }))
 }
 
@@ -194,8 +194,8 @@ function useForceSimulation(
       target: nodesRef.current.findIndex((n) => n.id === e.target),
     })).filter((e) => e.source >= 0 && e.target >= 0)
 
-    const idealDist = Math.max(60, Math.min(200, 3000 / Math.sqrt(initial.length)))
-    const repulsionCutoff = idealDist * 3
+    const idealDist = Math.max(80, Math.min(300, 4000 / Math.sqrt(initial.length)))
+    const repulsionCutoff = idealDist * 4
     let frameCount = 0
 
     const tick = () => {
@@ -204,8 +204,8 @@ function useForceSimulation(
       const ns = nodesRef.current
 
       for (const node of ns) {
-        node.vx += (width / 2 - node.x) * 0.0008 * alpha
-        node.vy += (height / 2 - node.y) * 0.0008 * alpha
+        node.vx += (width / 2 - node.x) * 0.0003 * alpha
+        node.vy += (height / 2 - node.y) * 0.0003 * alpha
       }
 
       for (let i = 0; i < ns.length; i++) {
@@ -215,7 +215,7 @@ function useForceSimulation(
           const distSq = dx * dx + dy * dy
           if (distSq > repulsionCutoff * repulsionCutoff) continue
           const dist = Math.sqrt(distSq) || 1
-          const force = (120 * alpha) / (dist * dist)
+          const force = (350 * alpha) / (dist * dist)
           dx *= force; dy *= force
           a.vx -= dx; a.vy -= dy
           b.vx += dx; b.vy += dy
@@ -238,9 +238,6 @@ function useForceSimulation(
         node.vy *= 0.82
         node.x += node.vx
         node.y += node.vy
-        const margin = 30
-        node.x = Math.max(margin, Math.min(width - margin, node.x))
-        node.y = Math.max(margin, Math.min(height - margin, node.y))
       }
 
       frameCount++
@@ -270,17 +267,31 @@ export default function Graph() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [layout, setLayout] = useState<LayoutType>('force')
   const [showLayoutMenu, setShowLayoutMenu] = useState(false)
+  const [minFrequency, setMinFrequency] = useState(2)
+  const [showFilters, setShowFilters] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const { width, height } = useContainerSize(containerRef)
 
+  // Get workspace id
+  const activeWorkspaceId = (() => {
+    try {
+      const stored = localStorage.getItem('edu-nexus-workspaces')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        return parsed?.state?.activeWorkspaceId || 'default'
+      }
+    } catch {}
+    return 'default'
+  })()
+
   const { data: nodesData, isLoading: nodesLoading, error: nodesError } = useQuery({
-    queryKey: ['graph-nodes'],
-    queryFn: getGraphNodes,
+    queryKey: ['graph-nodes', minFrequency, activeWorkspaceId],
+    queryFn: () => getGraphNodes(activeWorkspaceId, minFrequency),
   })
 
   const { data: edgesData, isLoading: edgesLoading } = useQuery({
-    queryKey: ['graph-edges'],
-    queryFn: getGraphEdges,
+    queryKey: ['graph-edges', minFrequency, activeWorkspaceId],
+    queryFn: () => getGraphEdges(activeWorkspaceId, minFrequency),
   })
 
   const rawNodes = nodesData?.nodes || []
@@ -334,6 +345,22 @@ export default function Graph() {
 
   const handleMouseUp = () => setDragging(false)
 
+  // WASD keyboard panning
+  useEffect(() => {
+    const PAN_SPEED = 40
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      switch (e.key.toLowerCase()) {
+        case 'w': setPan((p) => ({ ...p, y: p.y + PAN_SPEED })); break
+        case 'a': setPan((p) => ({ ...p, x: p.x + PAN_SPEED })); break
+        case 's': setPan((p) => ({ ...p, y: p.y - PAN_SPEED })); break
+        case 'd': setPan((p) => ({ ...p, x: p.x - PAN_SPEED })); break
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault()
     const delta = e.deltaY > 0 ? -0.08 : 0.08
@@ -371,11 +398,11 @@ export default function Graph() {
   const showLabel = simNodes.length <= 150
 
   return (
-    <PageTransition className="h-screen flex flex-col" style={{ background: '#1a1b26' }}>
-      {/* ── Floating controls — top-right ── */}
-      <div className="absolute top-4 left-4 z-30 flex items-center gap-3">
+    <PageTransition className="h-screen flex flex-col bg-[#1a1b26]">
+      {/* ── Floating controls — bottom center ── */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-[#1e2030]/90 backdrop-blur-md rounded-2xl border border-white/[0.12] px-4 py-2 shadow-2xl">
         {simNodes.length > 0 && (
-          <span className="text-white/50 text-sm font-medium px-3 py-1.5 rounded-xl bg-white/[0.06] border border-white/[0.08]">
+          <span className="text-white/50 text-xs font-medium px-2">
             {simNodes.length} nodes · {rawEdges.length} edges
           </span>
         )}
@@ -384,13 +411,13 @@ export default function Graph() {
         <div className="relative">
           <button
             onClick={() => setShowLayoutMenu(!showLayoutMenu)}
-            className="h-11 px-5 rounded-xl bg-white/[0.08] border border-white/[0.12] flex items-center gap-3 hover:bg-white/[0.14] transition-colors text-white/80 text-sm font-semibold shadow-lg"
+            className="h-9 px-4 rounded-xl bg-white/[0.08] border border-white/[0.08] flex items-center gap-2 hover:bg-white/[0.14] transition-colors text-white/80 text-xs font-semibold"
           >
-            <LayoutGrid size={18} />
+            <LayoutGrid size={14} />
             {LAYOUTS.find((l) => l.key === layout)?.label}
           </button>
           {showLayoutMenu && (
-            <div className="absolute top-full left-0 mt-2 w-48 rounded-xl bg-[#1e2030] border border-white/[0.12] shadow-2xl overflow-hidden z-50">
+            <div className="absolute bottom-full left-0 mb-2 w-44 rounded-xl bg-[#1e2030] border border-white/[0.12] shadow-2xl overflow-hidden z-50">
               {LAYOUTS.map((l) => (
                 <button
                   key={l.key}
@@ -400,7 +427,7 @@ export default function Graph() {
                     autoZoomApplied.current = false
                     setPan({ x: 0, y: 0 })
                   }}
-                  className={`w-full text-left px-5 py-3 text-sm font-medium transition-colors ${
+                  className={`w-full text-left px-4 py-2.5 text-xs font-medium transition-colors ${
                     layout === l.key
                       ? 'bg-cyan-500/15 text-cyan-400'
                       : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
@@ -415,23 +442,60 @@ export default function Graph() {
 
         <button
           onClick={handleFitView}
-          className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.12] flex items-center justify-center hover:bg-white/[0.14] transition-colors shadow-lg"
+          className="w-9 h-9 rounded-xl bg-white/[0.08] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.14] transition-colors"
           title="Fit to view"
         >
-          <Maximize2 size={18} className="text-white/70" />
+          <Maximize2 size={14} className="text-white/70" />
         </button>
         <button
           onClick={() => setZoom((z) => Math.min(z + 0.2, 4))}
-          className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.12] flex items-center justify-center hover:bg-white/[0.14] transition-colors shadow-lg"
+          className="w-9 h-9 rounded-xl bg-white/[0.08] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.14] transition-colors"
         >
-          <ZoomIn size={18} className="text-white/70" />
+          <ZoomIn size={14} className="text-white/70" />
         </button>
         <button
           onClick={() => setZoom((z) => Math.max(z - 0.2, 0.15))}
-          className="w-11 h-11 rounded-xl bg-white/[0.08] border border-white/[0.12] flex items-center justify-center hover:bg-white/[0.14] transition-colors shadow-lg"
+          className="w-9 h-9 rounded-xl bg-white/[0.08] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.14] transition-colors"
         >
-          <ZoomOut size={18} className="text-white/70" />
+          <ZoomOut size={14} className="text-white/70" />
         </button>
+
+        {/* Frequency filter */}
+        <div className="relative">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`h-9 px-3 rounded-xl border flex items-center gap-2 transition-colors text-xs font-semibold ${
+              minFrequency > 1
+                ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
+                : 'bg-white/[0.08] border-white/[0.08] text-white/80 hover:bg-white/[0.14]'
+            }`}
+          >
+            <SlidersHorizontal size={14} />
+            {minFrequency > 1 ? `≥${minFrequency}` : 'Filter'}
+          </button>
+          {showFilters && (
+            <div className="absolute bottom-full left-0 mb-2 w-60 rounded-xl bg-[#1e2030] border border-white/[0.12] shadow-2xl p-4 z-50">
+              <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Min Frequency</label>
+              <input
+                type="range"
+                min={1}
+                max={4}
+                value={minFrequency}
+                onChange={(e) => {
+                  setMinFrequency(Number(e.target.value))
+                  autoZoomApplied.current = false
+                }}
+                className="w-full accent-cyan-500"
+              />
+              <div className="flex justify-between text-white/50 text-xs mt-1">
+                <span>1 (all)</span>
+                <span className="text-cyan-400 font-semibold">{minFrequency}</span>
+                <span>4</span>
+              </div>
+              <p className="text-white/40 text-[10px] mt-2">Hide entities below {minFrequency} occurrence(s).</p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Full-screen canvas ── */}

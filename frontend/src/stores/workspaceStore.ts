@@ -65,7 +65,12 @@ interface WorkspaceState {
   // --- Messages ---
   addMessage: (workspaceId: string, chatId: string, message: Message) => void
   getChatMessages: (workspaceId: string, chatId: string) => Message[]
+
+  // --- Reset ---
+  clearAll: () => void
 }
+
+export const MAX_WORKSPACES = 4
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
@@ -79,6 +84,9 @@ export const useWorkspace = create<WorkspaceState>()(
       activeChatSessionId: null,
 
       createWorkspace: (name: string) => {
+        if (get().workspaces.length >= MAX_WORKSPACES) {
+          throw new Error(`Maximum of ${MAX_WORKSPACES} workspaces allowed`)
+        }
         const id = generateId()
         const idx = get().workspaces.length
         const workspace: Workspace = {
@@ -211,6 +219,10 @@ export const useWorkspace = create<WorkspaceState>()(
         const ws = get().workspaces.find((w) => w.id === workspaceId)
         const chat = ws?.chatSessions.find((c) => c.id === chatId)
         return chat?.messages || []
+      },
+
+      clearAll: () => {
+        set({ workspaces: [], activeWorkspaceId: null, activeChatSessionId: null })
       },
     }),
     {

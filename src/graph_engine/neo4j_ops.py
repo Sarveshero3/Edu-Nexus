@@ -92,14 +92,30 @@ def delete_workspace_graph(workspace_id: str) -> None:
         path.unlink()
 
 
-def get_all_nodes(workspace_id: str) -> list[dict]:
+def get_all_nodes(workspace_id: str, min_frequency: int = 1) -> list[dict]:
     G = _load_graph(workspace_id)
-    return [{"id": nid, **data} for nid, data in G.nodes(data=True)]
+    nodes = []
+    for nid, data in G.nodes(data=True):
+        freq = data.get("frequency", 1)
+        if freq >= min_frequency:
+            nodes.append({"id": nid, **data})
+    return nodes
 
 
-def get_all_edges(workspace_id: str) -> list[dict]:
+def get_all_edges(workspace_id: str, min_weight: float = 0.0, min_frequency: int = 1) -> list[dict]:
     G = _load_graph(workspace_id)
-    return [{"source": s, "target": t, **data} for s, t, data in G.edges(data=True)]
+    # Collect nodes that meet frequency threshold
+    valid_nodes = set()
+    for nid, data in G.nodes(data=True):
+        if data.get("frequency", 1) >= min_frequency:
+            valid_nodes.add(nid)
+
+    edges = []
+    for s, t, data in G.edges(data=True):
+        if s in valid_nodes and t in valid_nodes:
+            if data.get("weight", 1.0) >= min_weight:
+                edges.append({"source": s, "target": t, **data})
+    return edges
 
 
 def get_node_detail(workspace_id: str, node_name: str) -> dict:
@@ -122,6 +138,15 @@ def get_node_detail(workspace_id: str, node_name: str) -> dict:
     return {
         "node": {"id": name_lower, **G.nodes[name_lower]},
         "neighbors": neighbors
+    }
+
+
+def get_graph_stats(workspace_id: str) -> dict:
+    """Return basic graph statistics for health check."""
+    G = _load_graph(workspace_id)
+    return {
+        "nodes": G.number_of_nodes(),
+        "edges": G.number_of_edges(),
     }
 
 

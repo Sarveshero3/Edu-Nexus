@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTheme } from '@/stores/themeStore'
+import { useAuth } from '@/stores/authStore'
 import PageTransition from '@/components/common/PageTransition'
 import PillButton from '@/components/common/PillButton'
 import { cn } from '@/lib/utils'
@@ -12,52 +14,47 @@ const accents = [
   { id: 'teal', color: '#2DD4BF' },
 ] as const
 
-const tabs = ['General', 'Appearance'] as const
-
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<string>('General')
+  const navigate = useNavigate()
   const { theme, accentColor, setTheme, setAccent } = useTheme()
+  const deleteAccount = useAuth((s) => s.deleteAccount)
+  const user = useAuth((s) => s.user)
   const [saved, setSaved] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2000) }
 
+  const handleDeleteAccount = async () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true)
+      return
+    }
+    setDeleting(true)
+    try {
+      await deleteAccount()
+      navigate('/')
+    } catch {
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
+
   return (
     <PageTransition className="p-6 lg:p-8 max-w-3xl">
-      <h1 className="text-2xl font-bold text-white mb-6">Settings</h1>
+      <h1 className="text-2xl font-bold text-white mb-8">Settings</h1>
 
-      <div className="flex gap-2 mb-8">
-        {tabs.map((t) => (
-          <button key={t} onClick={() => setActiveTab(t)}
-            className={cn('px-4 py-2 rounded-full text-sm font-medium transition-colors',
-              activeTab === t ? 'bg-accent-cyan/20 text-accent-cyan' : 'text-text-muted hover:text-white'
-            )}>{t}</button>
-        ))}
+      {/* AI Engine info */}
+      <div className="p-4 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] mb-8">
+        <p className="text-text-muted text-sm">
+          <span className="text-accent-cyan font-semibold">AI Engine:</span> The orchestrator automatically selects the optimal retrieval strategy (BM25, Qdrant, NetworkX, or hybrid) for each query. No manual configuration needed.
+        </p>
       </div>
 
-      {activeTab === 'General' && (
+      {/* Appearance */}
+      <div className="mb-8">
+        <h2 className="text-white text-sm font-semibold mb-4 uppercase tracking-wider">Appearance</h2>
         <div className="flex flex-col gap-6">
-          <div>
-            <label className="text-text-muted text-xs block mb-1.5">Language</label>
-            <select className="input-field text-sm w-full max-w-xs"><option>English</option><option>Hindi</option><option>Spanish</option></select>
-          </div>
-          <div>
-            <label className="text-text-muted text-xs block mb-1.5">Timezone</label>
-            <select className="input-field text-sm w-full max-w-xs"><option>UTC+5:30 (IST)</option><option>UTC+0 (GMT)</option><option>UTC-5 (EST)</option></select>
-          </div>
-          <div>
-            <label className="text-text-muted text-xs block mb-1.5">Account Email</label>
-            <p className="text-white text-sm">user@university.edu</p>
-          </div>
-          <div className="mt-4 p-4 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)]">
-            <p className="text-text-muted text-sm">
-              <span className="text-accent-cyan font-semibold">AI Engine:</span> The orchestrator automatically selects the optimal retrieval strategy (BM25, FAISS, Neo4j, or hybrid) for each query. No manual configuration needed.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'Appearance' && (
-        <div className="flex flex-col gap-8">
           <div>
             <label className="text-text-muted text-xs block mb-3">Theme</label>
             <div className="flex gap-2">
@@ -81,9 +78,49 @@ export default function Settings() {
             </div>
           </div>
         </div>
-      )}
+      </div>
 
-      <div className="mt-8 flex items-center gap-4">
+      {/* Account */}
+      <div className="mb-8">
+        <h2 className="text-white text-sm font-semibold mb-4 uppercase tracking-wider">Account</h2>
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className="text-text-muted text-xs block mb-1.5">Username</label>
+            <p className="text-white text-sm font-medium">{user?.name || 'Unknown'}</p>
+          </div>
+          <div className="p-4 rounded-[12px] bg-red-500/5 border border-red-500/20">
+            <h3 className="text-red-400 font-semibold text-sm mb-2">Danger Zone</h3>
+            <p className="text-text-muted text-xs mb-4">
+              Permanently delete your account and <strong>all data</strong> (documents, graphs, chat history). This cannot be undone.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleting}
+                className={cn(
+                  'px-5 py-2.5 rounded-xl text-sm font-bold transition-all',
+                  confirmDelete
+                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    : 'bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20'
+                )}
+              >
+                {deleting ? 'Deleting...' : confirmDelete ? 'Click Again to Confirm' : 'Delete Account & All Data'}
+              </button>
+              {confirmDelete && !deleting && (
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-4 py-2 text-text-muted text-sm hover:text-white"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Save */}
+      <div className="flex items-center gap-4">
         <PillButton onClick={handleSave}>Save Settings</PillButton>
         {saved && <span className="text-green-400 text-sm">✓ Saved</span>}
       </div>

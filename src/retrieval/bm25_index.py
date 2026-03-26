@@ -124,3 +124,19 @@ def delete_doc_and_rebuild(workspace_id: str, doc_id: str) -> None:
         path = _index_path(workspace_id)
         if path.exists():
             path.unlink()
+
+
+def index_exists(workspace_id: str) -> bool:
+    """Check if a BM25 index exists for this workspace."""
+    return _index_path(workspace_id).exists()
+
+
+def doc_count(workspace_id: str) -> int:
+    """Count how many chunks are in the BM25 index."""
+    path = _index_path(workspace_id)
+    if not path.exists():
+        return 0
+    with open(path, "rb") as f:
+        data = pickle.load(f)
+    return len(data.get("chunks", []))
+

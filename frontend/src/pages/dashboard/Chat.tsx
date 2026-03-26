@@ -31,15 +31,15 @@ export default function Chat() {
 
   // Engine status
   const { data: status, refetch: refetchStatus } = useQuery<EngineStatus>({
-    queryKey: ['engineStatus'],
-    queryFn: getStatus,
+    queryKey: ['engineStatus', activeWorkspaceId],
+    queryFn: () => getStatus(activeWorkspaceId || 'default'),
     refetchInterval: 30000,
   })
 
   // Suggested questions
   const { data: suggestions } = useQuery<string[]>({
-    queryKey: ['suggestions'],
-    queryFn: getSuggestions,
+    queryKey: ['suggestions', activeWorkspaceId],
+    queryFn: () => getSuggestions(activeWorkspaceId || 'default'),
     staleTime: 60000,
   })
 
@@ -51,7 +51,7 @@ export default function Chat() {
     mutationFn: (query: string) => {
       const ws = getActiveWorkspace()
       const sourceFilter = ws?.sourceNames.length ? ws.sourceNames : undefined
-      return sendChat(query, sourceFilter)
+      return sendChat(query, activeWorkspaceId || 'default', sourceFilter)
     },
     onSuccess: (data: ChatResponse) => {
       if (!activeWorkspaceId || !activeChatSessionId) return
@@ -136,9 +136,9 @@ export default function Chat() {
         <div className="flex items-center gap-4">
           {/* Engine status indicators */}
           <div className="flex items-center gap-3">
-            <EngineStatusDot label="BM25" ready={status?.bm25} />
-            <EngineStatusDot label="Qdrant" ready={status?.vector} />
-            <EngineStatusDot label="Graph" ready={status?.graph} />
+            <EngineStatusDot label="BM25" ready={status?.bm25?.online} />
+            <EngineStatusDot label="Qdrant" ready={status?.qdrant?.online} />
+            <EngineStatusDot label="NetworkX" ready={status?.graph?.online} />
           </div>
           <button
             onClick={handleRefreshStatus}

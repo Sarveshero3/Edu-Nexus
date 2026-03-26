@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Zap, Brain, GitBranch, ArrowRight, Sparkles } from 'lucide-react'
 import PageTransition from '@/components/common/PageTransition'
 import BlurFade from '@/components/magicui/BlurFade'
 import AnimatedGradientText from '@/components/magicui/AnimatedGradientText'
+import { authStatus } from '@/lib/api'
 
 const features = [
   {
@@ -16,16 +18,16 @@ const features = [
   },
   {
     icon: Brain,
-    title: 'Semantic Brain (FAISS)',
-    desc: 'Deep vector similarity search powered by FAISS. Understands meaning and context beyond exact keyword matches.',
+    title: 'Semantic Brain (Qdrant)',
+    desc: 'Deep vector similarity search powered by Qdrant. Understands meaning and context beyond exact keyword matches.',
     gradient: 'from-purple-500/15 to-violet-500/15',
     borderColor: 'border-purple-500/20',
     iconColor: 'text-purple-400',
   },
   {
     icon: GitBranch,
-    title: 'Deep Brain (Neo4j)',
-    desc: 'Knowledge graph traversal via Neo4j. Maps relationships between concepts for interconnected academic insights.',
+    title: 'Deep Brain (Graph)',
+    desc: 'Knowledge graph traversal via NetworkX. Maps relationships between concepts for interconnected academic insights.',
     gradient: 'from-violet-500/15 to-fuchsia-500/15',
     borderColor: 'border-violet-500/20',
     iconColor: 'text-violet-400',
@@ -34,6 +36,15 @@ const features = [
 
 export default function Home() {
   const navigate = useNavigate()
+
+  // Auto-redirect if already logged in
+  useEffect(() => {
+    authStatus().then((status) => {
+      if (status.logged_in) {
+        navigate('/dashboard/sources', { replace: true })
+      }
+    }).catch(() => {})
+  }, [navigate])
 
   return (
     <PageTransition>

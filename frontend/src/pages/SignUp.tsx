@@ -1,18 +1,18 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Sparkles, ArrowRight, UserPlus, Eye, EyeOff } from 'lucide-react'
+import { Sparkles, ArrowRight, UserPlus, Eye, EyeOff, AlertTriangle, Trash2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useAuth } from '@/stores/authStore'
+import { authStatus, authDeleteAccount } from '@/lib/api'
 import PageTransition from '@/components/common/PageTransition'
 import BlurFade from '@/components/magicui/BlurFade'
 import AnimatedGradientText from '@/components/magicui/AnimatedGradientText'
 
 const schema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Please enter a valid university email'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  name: z.string().min(2, 'Username must be at least 2 characters'),
+  password: z.string().min(4, 'Password must be at least 4 characters'),
   confirmPassword: z.string(),
 }).refine((d) => d.password === d.confirmPassword, {
   message: 'Passwords do not match',
@@ -27,10 +27,26 @@ export default function SignUp() {
   const signUp = useAuth((s) => s.signUp)
   const isLoading = useAuth((s) => s.isLoading)
   const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
+
+  // Single-user disclaimer state
+  const [existingUser, setExistingUser] = useState<string | null>(null)
+  const [showDisclaimer, setShowDisclaimer] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const cardRef = useRef<HTMLDivElement>(null)
   const [glowPos, setGlowPos] = useState({ x: 50, y: 50 })
   const [isHovering, setIsHovering] = useState(false)
+
+  // Check if user already exists
+  useEffect(() => {
+    authStatus().then((status) => {
+      if (status.registered) {
+        setExistingUser(status.username)
+        setShowDisclaimer(true)
+      }
+    }).catch(() => {})
+  }, [])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!cardRef.current) return
@@ -46,8 +62,28 @@ export default function SignUp() {
   })
 
   const onSubmit = async (data: FormData) => {
-    await signUp(data.name, data.email, data.password)
-    navigate('/onboarding')
+    setError('')
+    try {
+      await signUp(data.name, data.password)
+      navigate('/onboarding')
+    } catch (err: any) {
+      setError(err?.message || 'Registration failed')
+    }
+  }
+
+  const handleDeleteAndContinue = async () => {
+    setIsDeleting(true)
+    try {
+      await authDeleteAccount()
+      localStorage.removeItem('edu-nexus-session-token')
+      localStorage.removeItem('edu-nexus-workspaces')
+      localStorage.removeItem('edu-nexus-auth')
+      setExistingUser(null)
+      setShowDisclaimer(false)
+    } catch (err: any) {
+      setError('Failed to delete existing account')
+    }
+    setIsDeleting(false)
   }
 
   return (
@@ -69,7 +105,7 @@ export default function SignUp() {
           />
 
           <div className="relative z-10">
-            {/* Header row — logo + title side by side */}
+            {/* Header row */}
             <div className="flex items-start justify-between mb-6">
               <div>
                 <Link to="/" className="inline-flex items-center gap-2.5 mb-4 group">
@@ -96,58 +132,103 @@ export default function SignUp() {
                   </AnimatedGradientText>
                 </h1>
                 <p className="text-white/80 text-sm mt-1 font-medium" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
-                  Create your Edu Nexus account.
+                  Create your local Edu Nexus account.
                 </p>
               </div>
             </div>
 
-            {/* 2×2 grid — no scroll */}
-            <form onSubmit={handleSubmit(onSubmit)}>
-              <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                <div>
-                  <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Full Name</label>
-                  <input {...register('name')} placeholder="John Doe" className={inputClass} />
-                  {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>}
-                </div>
-                <div>
-                  <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">University Email</label>
-                  <input {...register('email')} placeholder="you@university.edu" className={inputClass} />
-                  {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email.message}</p>}
-                </div>
-                <div className="relative">
-                  <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Password</label>
-                  <input
-                    {...register('password')}
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Min 8 characters"
-                    className={`${inputClass} pr-11`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-[38px] text-white/50 hover:text-white/80 transition-colors"
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                  {errors.password && <p className="text-red-400 text-xs mt-1">{errors.password.message}</p>}
-                </div>
-                <div>
-                  <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Confirm Password</label>
-                  <input {...register('confirmPassword')} type="password" placeholder="••••••••" className={inputClass} />
-                  {errors.confirmPassword && <p className="text-red-400 text-xs mt-1">{errors.confirmPassword.message}</p>}
+            {/* Disclaimer: account already exists */}
+            {showDisclaimer && (
+              <div className="mb-6 p-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 backdrop-blur-sm">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="text-amber-400 shrink-0 mt-0.5" size={20} />
+                  <div>
+                    <h3 className="text-amber-300 font-bold text-sm mb-1">Account already exists</h3>
+                    <p className="text-white/70 text-sm">
+                      This machine already has an account for <span className="text-cyan-400 font-semibold">{existingUser}</span>.
+                      Edu Nexus supports one user per machine.
+                    </p>
+                    <p className="text-white/50 text-xs mt-2">
+                      You can sign in with the existing account, or delete everything and start fresh.
+                    </p>
+                    <div className="flex items-center gap-3 mt-4">
+                      <Link
+                        to="/sign-in"
+                        className="px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm font-semibold hover:bg-white/20 transition-colors"
+                      >
+                        Sign In Instead
+                      </Link>
+                      <button
+                        onClick={handleDeleteAndContinue}
+                        disabled={isDeleting}
+                        className="px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-sm font-semibold hover:bg-red-500/30 transition-colors flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Trash2 size={14} />
+                        {isDeleting ? 'Deleting...' : 'Delete Everything & Start Fresh'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
+            )}
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="group relative w-full flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold text-base shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed mt-5"
-              >
-                <UserPlus size={18} />
-                {isLoading ? 'Creating account...' : 'Create Account'}
-                <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-              </button>
-            </form>
+            {/* Error message */}
+            {error && (
+              <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                <p className="text-red-400 text-sm">{error}</p>
+              </div>
+            )}
+
+            {/* Form — hidden when disclaimer is active */}
+            {!showDisclaimer && (
+              <form onSubmit={handleSubmit(onSubmit)}>
+                <div className="grid grid-cols-1 gap-y-3">
+                  <div>
+                    <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Username</label>
+                    <input {...register('name')} placeholder="Choose a username" className={inputClass} />
+                    {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name.message}</p>}
+                  </div>
+                  <div className="relative">
+                    <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Password</label>
+                    <input
+                      {...register('password')}
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Min 4 characters"
+                      className={`${inputClass} pr-11`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-[38px] text-white/50 hover:text-white/80 transition-colors"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                    {errors.password && <p className="text-red-400 text-xs mt-1">{errors.password.message}</p>}
+                  </div>
+                  <div>
+                    <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Confirm Password</label>
+                    <input {...register('confirmPassword')} type="password" placeholder="••••••••" className={inputClass} />
+                    {errors.confirmPassword && <p className="text-red-400 text-xs mt-1">{errors.confirmPassword.message}</p>}
+                  </div>
+                </div>
+
+                <div className="mt-3 px-4 py-2.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                  <p className="text-cyan-300 text-xs">
+                    🔒 Single-user · This account is local to your machine. No cloud sync.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="group relative w-full flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold text-base shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed mt-5"
+                >
+                  <UserPlus size={18} />
+                  {isLoading ? 'Creating account...' : 'Create Account'}
+                  <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                </button>
+              </form>
+            )}
 
             <p className="text-white/60 text-sm mt-4 font-medium">
               Already have an account?{' '}

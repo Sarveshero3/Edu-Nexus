@@ -1,17 +1,27 @@
-import { useState, useRef, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Mail, CheckCircle, ArrowLeft, Sparkles, ArrowRight } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Sparkles, Lock } from 'lucide-react'
+import { authStatus } from '@/lib/api'
 import PageTransition from '@/components/common/PageTransition'
 import BlurFade from '@/components/magicui/BlurFade'
 
 export default function ForgotPassword() {
-  const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
+  const navigate = useNavigate()
+  const [noAccount, setNoAccount] = useState(false)
 
   const cardRef = useRef<HTMLDivElement>(null)
   const [glowPos, setGlowPos] = useState({ x: 50, y: 50 })
   const [isHovering, setIsHovering] = useState(false)
+
+  // Guard: redirect if no account exists
+  useEffect(() => {
+    authStatus().then((status) => {
+      if (!status.registered) {
+        setNoAccount(true)
+      }
+    }).catch(() => {})
+  }, [])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!cardRef.current) return
@@ -21,11 +31,6 @@ export default function ForgotPassword() {
       y: ((e.clientY - rect.top) / rect.height) * 100,
     })
   }, [])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (email) setSent(true)
-  }
 
   return (
     <PageTransition className="min-h-screen flex items-center justify-center px-6 py-12">
@@ -58,14 +63,13 @@ export default function ForgotPassword() {
               </span>
             </Link>
 
-            {!sent ? (
+            {noAccount ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <div className="flex justify-center mb-6">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/15 to-purple-500/15 border border-white/10 flex items-center justify-center">
-                    <Mail className="text-cyan-400" size={28} />
+                  <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+                    <AlertTriangle className="text-amber-400" size={28} />
                   </div>
                 </div>
-
                 <h1
                   className="text-3xl font-extrabold text-white text-center mb-3"
                   style={{
@@ -73,57 +77,47 @@ export default function ForgotPassword() {
                     textShadow: '0 4px 24px rgba(0,0,0,0.6)',
                   }}
                 >
-                  Reset your password
+                  No account found
                 </h1>
-                <p className="text-white/80 text-center text-base mb-8 font-medium" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
-                  Enter your university email and we'll send a reset link.
+                <p className="text-white/80 text-center text-base mb-6 font-medium">
+                  There's no account on this machine. Password reset is not available.
                 </p>
-
-                <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-w-md mx-auto">
-                  <div>
-                    <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2.5 block">Email</label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="your@university.edu"
-                      required
-                      className="w-full bg-white/[0.10] border border-white/[0.15] rounded-xl px-4 py-4 text-white text-base font-medium outline-none focus:border-cyan-500/60 focus:bg-white/[0.12] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/40 backdrop-blur-sm"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="group w-full flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold text-base shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-[1.02] mt-2"
+                <div className="flex justify-center gap-3">
+                  <Link
+                    to="/sign-up"
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold text-sm hover:scale-[1.02] transition-all"
                   >
-                    Send reset link
-                    <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-                  </button>
-                </form>
+                    Create an Account
+                  </Link>
+                </div>
               </motion.div>
             ) : (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="text-center"
-              >
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <div className="flex justify-center mb-6">
-                  <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
-                    <CheckCircle className="text-emerald-400" size={28} />
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/15 to-purple-500/15 border border-white/10 flex items-center justify-center">
+                    <Lock className="text-cyan-400" size={28} />
                   </div>
                 </div>
-                <h2
-                  className="text-2xl font-extrabold text-white mb-3"
+                <h1
+                  className="text-3xl font-extrabold text-white text-center mb-3"
                   style={{
                     fontFamily: "'Space Grotesk', sans-serif",
                     textShadow: '0 4px 24px rgba(0,0,0,0.6)',
                   }}
                 >
-                  Check your inbox
-                </h2>
-                <p className="text-white/80 text-base font-medium">
-                  We've sent a password reset link to <strong className="text-white">{email}</strong>
+                  Password Recovery
+                </h1>
+                <p className="text-white/80 text-center text-base mb-6 font-medium" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
+                  Edu Nexus is a local-only application. To reset your password, delete your account and create a new one from the Sign Up page.
                 </p>
+                <div className="flex justify-center gap-3">
+                  <Link
+                    to="/sign-up"
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold text-sm hover:scale-[1.02] transition-all"
+                  >
+                    Go to Sign Up
+                  </Link>
+                </div>
               </motion.div>
             )}
 

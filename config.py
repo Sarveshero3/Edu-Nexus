@@ -12,6 +12,9 @@ QDRANT_DIR     = ARTIFACTS_DIR / "qdrant"
 BM25_DIR       = ARTIFACTS_DIR / "bm25"
 GRAPHS_DIR     = ARTIFACTS_DIR / "graphs"
 
+# ── Auth ──────────────────────────────────────────────────────
+AUTH_DIR       = DATA_DIR / "auth"
+
 # ── Qdrant ────────────────────────────────────────────────────
 QDRANT_COLLECTION = "edu_nexus_chunks"
 
@@ -34,5 +37,5 @@ ALLOWED_EXTENSIONS      = {".pdf", ".docx", ".txt", ".pptx", ".xlsx", ".csv", ".
 WORKSPACE_ID_PATTERN    = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 # ── Ensure all directories exist on import ────────────────────
-for _d in [RAW_DIR, PROCESSED_DIR, QDRANT_DIR, BM25_DIR, GRAPHS_DIR]:
+for _d in [RAW_DIR, PROCESSED_DIR, QDRANT_DIR, BM25_DIR, GRAPHS_DIR, AUTH_DIR]:
     _d.mkdir(parents=True, exist_ok=True)

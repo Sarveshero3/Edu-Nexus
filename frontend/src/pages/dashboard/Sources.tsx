@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, FileText, Upload, X, CheckCircle, AlertCircle, Loader2, Trash2, FolderPlus, Info, Shield } from 'lucide-react'
+import { Search, Plus, FileText, Upload, X, CheckCircle, AlertCircle, Loader2, Trash2, FolderPlus, Info, Shield, Clock } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import PageTransition from '@/components/common/PageTransition'
 import GlassCard from '@/components/common/GlassCard'
 import PillButton from '@/components/common/PillButton'
-import { getSources, uploadSourcesBatch, deleteSource, type Source } from '@/lib/api'
-import { useWorkspace } from '@/stores/workspaceStore'
+import { getSources, uploadSourcesBatch, deleteSource, getJobStatus, type Source } from '@/lib/api'
+import { useWorkspace, MAX_WORKSPACES } from '@/stores/workspaceStore'
 
 const typeColors: Record<string, string> = {
   pdf: 'text-red-400',
@@ -39,6 +39,8 @@ export default function Sources() {
   const [showUpload, setShowUpload] = useState(false)
   const [uploadJobs, setUploadJobs] = useState<UploadJob[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadStartTime, setUploadStartTime] = useState<number | null>(null)
+  const [uploadElapsed, setUploadElapsed] = useState(0)
 
   // Rate limit state
   const [uploadCount, setUploadCount] = useState(0)
@@ -61,6 +63,15 @@ export default function Sources() {
 
   const noWorkspace = !activeWorkspaceId
 
+  // Upload stopwatch
+  useEffect(() => {
+    if (!isUploading || !uploadStartTime) { setUploadElapsed(0); return }
+    const interval = setInterval(() => {
+      setUploadElapsed(Math.floor((Date.now() - uploadStartTime) / 1000))
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [isUploading, uploadStartTime])
+
   // Rate limit timer
   useEffect(() => {
     if (!rateLimitEnd) return
@@ -81,9 +92,9 @@ export default function Sources() {
   }, [rateLimitEnd])
 
   // Fetch all sources from backend
-  const { data: allSources = [], isLoading, error } = useQuery({
-    queryKey: ['sources'],
-    queryFn: getSources,
+  const { data: allSources = [], isLoading, error } = useQuery<Source[]>({
+    queryKey: ['sources', activeWorkspaceId],
+    queryFn: () => getSources(activeWorkspaceId || 'default'),
   })
 
   // Sync workspace sourceNames with backend on every fetch
@@ -106,9 +117,9 @@ export default function Sources() {
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: deleteSource,
+    mutationFn: (name: string) => deleteSource(name, activeWorkspaceId || 'default'),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sources'] })
+      queryClient.invalidateQueries({ queryKey: ['sources', activeWorkspaceId] })
     },
   })
 
@@ -143,6 +154,7 @@ export default function Sources() {
     }
 
     setIsUploading(true)
+    setUploadStartTime(Date.now())
     const jobs: UploadJob[] = files.map((f) => ({ file: f, status: 'pending' as const }))
     setUploadJobs(jobs)
 
@@ -154,7 +166,8 @@ export default function Sources() {
     })))
 
     try {
-      const result = await uploadSourcesBatch(files)
+      const wsId = activeWorkspaceId || 'default'
+      const result = await uploadSourcesBatch(files, wsId)
 
       // Track upload count for rate limiting
       const newCount = uploadCount + 1
@@ -163,13 +176,76 @@ export default function Sources() {
         setRateLimitEnd(Date.now() + RATE_LIMIT_WINDOW_MS)
       }
 
-      // Update each job status from batch result
+      // If we got a job_id, poll for completion to get real chunk counts
+      if (result.job_id) {
+        const jobId = result.job_id
+        // Add all files to workspace immediately
+        for (const r of result.results) {
+          if (activeWorkspaceId) {
+            addSourceToWorkspace(activeWorkspaceId, r.filename)
+          }
+        }
+        setUploadJobs(jobs.map((j) => ({
+          ...j,
+          status: 'uploading' as const,
+          message: 'Processing...',
+        })))
+
+        // Poll job status every 2 seconds
+        const pollInterval = setInterval(async () => {
+          try {
+            const jobStatus = await getJobStatus(jobId)
+            const fileStatuses = jobStatus.files || {}
+
+            setUploadJobs(jobs.map((j) => {
+              const fStatus = fileStatuses[j.file.name]
+              if (!fStatus) return { ...j, status: 'uploading' as const, message: 'Waiting...' }
+              if (fStatus.status === 'done') {
+                return {
+                  ...j,
+                  status: 'done' as const,
+                  message: fStatus.warning
+                    ? `Done — ${fStatus.chunks} chunks (${fStatus.warning})`
+                    : `Done — ${fStatus.chunks} chunks`,
+                  chunksCount: fStatus.chunks,
+                }
+              }
+              if (fStatus.status === 'error') {
+                return { ...j, status: 'error' as const, message: fStatus.error || 'Failed' }
+              }
+              return { ...j, status: 'uploading' as const, message: `${fStatus.stage || 'Processing'}...` }
+            }))
+
+            if (jobStatus.status === 'done' || jobStatus.status === 'error') {
+              clearInterval(pollInterval)
+              setIsUploading(false)
+              queryClient.invalidateQueries({ queryKey: ['sources', activeWorkspaceId] })
+              queryClient.invalidateQueries({ queryKey: ['suggestions'] })
+              queryClient.invalidateQueries({ queryKey: ['engineStatus'] })
+            }
+          } catch {
+            clearInterval(pollInterval)
+            setIsUploading(false)
+            queryClient.invalidateQueries({ queryKey: ['sources', activeWorkspaceId] })
+          }
+        }, 2000)
+
+        // Safety timeout after 5 minutes
+        setTimeout(() => {
+          clearInterval(pollInterval)
+          setIsUploading(false)
+          queryClient.invalidateQueries({ queryKey: ['sources', activeWorkspaceId] })
+        }, 300_000)
+
+        return // Polling handles isUploading
+      }
+
+      // Non-job response (sync upload)
       setUploadJobs(
         jobs.map((j) => {
           const r = result.results.find((res) => res.filename === j.file.name)
           if (!r) return { ...j, status: 'error' as const, message: 'Not found in results' }
           if (r.status === 'ok') {
-            // Auto-add to workspace
             if (activeWorkspaceId) {
               addSourceToWorkspace(activeWorkspaceId, r.filename)
             }
@@ -179,7 +255,6 @@ export default function Sources() {
         })
       )
     } catch (err: any) {
-      // Check if it's a 429 rate limit error
       if (err?.response?.status === 429) {
         setRateLimitEnd(Date.now() + RATE_LIMIT_WINDOW_MS)
         setUploadJobs(
@@ -193,7 +268,7 @@ export default function Sources() {
     }
 
     setIsUploading(false)
-    queryClient.invalidateQueries({ queryKey: ['sources'] })
+    queryClient.invalidateQueries({ queryKey: ['sources', activeWorkspaceId] })
     queryClient.invalidateQueries({ queryKey: ['suggestions'] })
   }, [queryClient, activeWorkspaceId, addSourceToWorkspace, noWorkspace, rateLimitEnd, uploadCount, workspaceSources.length])
 
@@ -224,6 +299,7 @@ export default function Sources() {
   }
 
   const handleQuickCreateWorkspace = () => {
+    if (workspaces.length >= MAX_WORKSPACES) return
     const name = newWsName.trim() || `Workspace ${workspaces.length + 1}`
     const id = createWorkspace(name)
     setActiveWorkspace(id)
@@ -231,12 +307,49 @@ export default function Sources() {
     setShowCreateWs(false)
   }
 
+  const workspaceLimitReached = workspaces.length >= MAX_WORKSPACES
+
   const [showAddExisting, setShowAddExisting] = useState(false)
 
   const isRateLimited = rateLimitEnd !== null && Date.now() < rateLimitEnd
 
   return (
     <PageTransition className="p-6 lg:p-8">
+      {/* Persistent upload progress toast — visible when uploading with sidebar closed */}
+      <AnimatePresence>
+        {isUploading && !showUpload && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-4 right-4 z-[100] w-80"
+          >
+            <div
+              className="rounded-xl bg-[#1e2030]/95 backdrop-blur-md border border-cyan-500/20 shadow-2xl p-4 cursor-pointer"
+              onClick={() => setShowUpload(true)}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <Loader2 className="text-cyan-400 animate-spin" size={16} />
+                <span className="text-white text-sm font-semibold">Processing documents...</span>
+                <span className="text-cyan-400 text-xs font-mono ml-auto">
+                  {Math.floor(uploadElapsed / 60)}:{String(uploadElapsed % 60).padStart(2, '0')}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <span>{uploadJobs.filter(j => j.status === 'done').length}/{uploadJobs.length} files done</span>
+                <span className="text-cyan-400/50">• Click to view details</span>
+              </div>
+              <div className="w-full h-1 bg-white/5 rounded-full mt-2 overflow-hidden">
+                <motion.div
+                  className="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-full"
+                  animate={{ width: `${uploadJobs.length > 0 ? (uploadJobs.filter(j => j.status === 'done').length / uploadJobs.length) * 100 : 0}%` }}
+                  transition={{ duration: 0.3 }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Rate limit bar — shown at top when active */}
       <AnimatePresence>
         {isRateLimited && (
@@ -283,9 +396,9 @@ export default function Sources() {
                   Workspaces isolate your documents and chat sessions. Create one to start uploading.
                 </p>
                 <div className="flex items-center gap-4 mt-2 text-xs text-text-muted">
+                  <span>🏠 {workspaces.length}/{MAX_WORKSPACES} workspaces</span>
                   <span>📄 Max {MAX_DOCS_PER_WORKSPACE} docs per workspace</span>
                   <span>📦 Max {MAX_FILE_SIZE_MB}MB per file</span>
-                  <span>⏱️ {RATE_LIMIT_UPLOADS} uploads/min</span>
                 </div>
               </div>
               <div>
@@ -304,6 +417,8 @@ export default function Sources() {
                       <X size={16} />
                     </button>
                   </div>
+                ) : workspaceLimitReached ? (
+                  <p className="text-amber-400 text-xs font-medium">🏠 {workspaces.length}/{MAX_WORKSPACES} workspaces (limit reached)</p>
                 ) : (
                   <PillButton onClick={() => setShowCreateWs(true)}>
                     <Plus size={16} /> New Workspace
@@ -518,7 +633,7 @@ export default function Sources() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 z-50 flex justify-end"
-            onClick={closeUploadPanel}
+            onClick={() => { if (!isUploading) closeUploadPanel() }}
           >
             <motion.div
               initial={{ x: 400 }}
@@ -566,11 +681,16 @@ export default function Sources() {
                 </div>
               )}
 
-              <div className="px-4 py-2 rounded-lg bg-accent-cyan/10 border border-accent-cyan/20 mb-4">
-                <p className="text-accent-cyan text-xs">
-                  📦 Batch mode — All files are processed in parallel for faster ingestion
-                </p>
-              </div>
+              {/* Upload stopwatch */}
+              {isUploading && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 mb-4">
+                  <Clock className="text-cyan-400 animate-pulse" size={14} />
+                  <span className="text-cyan-400 text-xs font-mono font-bold">
+                    {Math.floor(uploadElapsed / 60)}:{String(uploadElapsed % 60).padStart(2, '0')}
+                  </span>
+                  <span className="text-cyan-400/60 text-xs">elapsed</span>
+                </div>
+              )}
 
               {/* Drop zone — disabled if rate limited */}
               <div

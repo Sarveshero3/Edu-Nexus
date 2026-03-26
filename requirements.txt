@@ -34,6 +34,9 @@ openpyxl                      # XLSX (Excel) text extraction
 pillow                        # Image processing (OCR fallback)
 pytesseract                   # OCR engine binding
 
+# --- Authentication ---
+bcrypt>=4.0.0                 # Password hashing for single-user auth
+
 # --- Utilities ---
 tqdm>=4.66.0                  # Progress bars
 regex                         # Advanced regex patterns

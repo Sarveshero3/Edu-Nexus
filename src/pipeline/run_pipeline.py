@@ -60,7 +60,9 @@ def run_pipeline(
     chunk_texts = [text for (_, _, text) in chunks]
 
     if not chunk_texts:
-        raise ValueError(f"No chunks produced from {file_path.name}")
+        logger.warning(f"No chunks produced from {file_path.name} — skipping embedding/indexing")
+        progress("done", 100)
+        return {"status": "ok", "chunks": 0, "warning": "no_content"}
 
     # ── Embed ─────────────────────────────────────────────────────
     progress("embedding", 40)

@@ -131,3 +131,14 @@ def list_docs(workspace_id: str) -> list[str]:
 
 def count_docs(workspace_id: str) -> int:
     return len(list_docs(workspace_id))
+
+
+def collection_exists() -> bool:
+    """Check if the Qdrant collection exists and is accessible."""
+    try:
+        c = get_client()
+        existing = [col.name for col in c.get_collections().collections]
+        return QDRANT_COLLECTION in existing
+    except Exception:
+        return False
+

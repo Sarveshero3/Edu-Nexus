@@ -31,10 +31,14 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
 from config import (
     RAW_DIR, PROCESSED_DIR, ALLOWED_EXTENSIONS,
     MAX_FILE_SIZE_MB, MAX_DOCS_PER_WORKSPACE, WORKSPACE_ID_PATTERN,
 )
+from src.auth.auth_manager import AuthManager
 from src.orchestrator.manager import OrchestratorManager
 from src.vector_engine import store
 from src.graph_engine import neo4j_ops
@@ -69,6 +73,7 @@ app.add_middleware(
 )
 
 # ── Global state ──────────────────────────────────────────────────────
+auth = AuthManager()
 manager = OrchestratorManager()
 chat_history: list[dict] = []
 suggestions_cache: list[str] = []
@@ -76,6 +81,48 @@ suggestions_source_hash: str = ""
 
 # ── Async job tracking ────────────────────────────────────────────────
 ingestion_jobs: dict[str, dict] = {}
+
+
+# ── Session Token Middleware ──────────────────────────────────────────
+# Protects all /api/* routes except auth endpoints and status
+
+AUTH_EXEMPT_PATHS = {
+    "/api/auth/register",
+    "/api/auth/login",
+    "/api/auth/status",
+    "/api/auth/logout",
+    "/api/status",
+    "/api/status/refresh",
+}
+
+
+class SessionAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        path = request.url.path
+
+        # Skip non-API, auth-exempt, jobs, and WebSocket routes
+        if (
+            not path.startswith("/api/")
+            or path in AUTH_EXEMPT_PATHS
+            or path.startswith("/api/jobs/")
+            or path.startswith("/ws")
+        ):
+            return await call_next(request)
+
+        token = request.headers.get("x-session-token", "")
+        # Fallback: check query parameter (needed for iframe/embed file viewing)
+        if not token:
+            token = request.query_params.get("token", "")
+        if not token or not auth.validate_session(token):
+            return JSONResponse(
+                status_code=401,
+                content={"success": False, "data": None, "error": "Not authenticated"},
+            )
+
+        return await call_next(request)
+
+
+app.add_middleware(SessionAuthMiddleware)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -105,11 +152,20 @@ def validate_workspace_id(workspace_id: str) -> str:
 
 def _make_job(files: list[str]) -> str:
     job_id = str(uuid.uuid4())
+    file_tracking = {}
+    for fname in files:
+        file_tracking[fname] = {
+            "status": "pending",
+            "stage": "queued",
+            "chunks": 0,
+            "warning": None,
+            "error": None,
+        }
     ingestion_jobs[job_id] = {
         "status": "queued",
         "progress": 0,
         "stage": "queued",
-        "files": files,
+        "files": file_tracking,
         "started_at": datetime.utcnow().isoformat(),
         "error": None
     }
@@ -126,32 +182,131 @@ def _update_job(job_id: str, stage: str, pct: int):
             ingestion_jobs[job_id]["status"] = "done"
 
 
+def _update_file_status(job_id: str, filename: str, **kwargs):
+    """Update per-file tracking fields."""
+    if job_id in ingestion_jobs and filename in ingestion_jobs[job_id]["files"]:
+        ingestion_jobs[job_id]["files"][filename].update(kwargs)
+
+
+# ====================================================================== #
+#  AUTH                                                                     #
+# ====================================================================== #
+
+class AuthBody(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/auth/register")
+@limiter.limit("5/minute")
+async def auth_register(request: Request, body: AuthBody):
+    """Register the single local user."""
+    try:
+        token = auth.register(body.username, body.password)
+        return ok({"token": token, "username": body.username})
+    except ValueError as e:
+        fail(str(e), 400)
+
+
+@app.post("/api/auth/login")
+@limiter.limit("10/minute")
+async def auth_login(request: Request, body: AuthBody):
+    """Login with username + password."""
+    try:
+        token = auth.login(body.username, body.password)
+        return ok({"token": token, "username": body.username})
+    except ValueError as e:
+        fail(str(e), 401)
+
+
+@app.post("/api/auth/logout")
+async def auth_logout(request: Request):
+    """Invalidate the current session."""
+    token = request.headers.get("x-session-token", "")
+    auth.logout(token)
+    return ok({"message": "Logged out"})
+
+
+@app.get("/api/auth/status")
+@limiter.limit("60/minute")
+async def auth_status_check(request: Request):
+    """Check if a user is registered + if a valid session exists."""
+    token = request.headers.get("x-session-token", "")
+    status = auth.get_status()
+    # Also check if the provided token is valid
+    if token:
+        session = auth.validate_session(token)
+        status["logged_in"] = session is not None
+        if session:
+            status["username"] = session["username"]
+    else:
+        status["logged_in"] = False
+    return ok(status)
+
+
+@app.post("/api/auth/delete-account")
+async def auth_delete_account(request: Request):
+    """DELETE EVERYTHING — wipes user and all data."""
+    token = request.headers.get("x-session-token", "")
+    if not token or not auth.validate_session(token):
+        fail("Not authenticated", 401)
+    auth.delete_account()
+    return ok({"message": "Account and all data deleted"})
+
+
 # ====================================================================== #
 #  STATUS                                                                  #
 # ====================================================================== #
 
 @app.get("/api/status")
 @limiter.limit("60/minute")
-async def get_status(request: Request):
-    """Returns readiness status for all three retrieval engines."""
+async def get_status(request: Request, workspace_id: str = Query("default")):
+    """Returns readiness status for all three retrieval engines with real health checks."""
+    # BM25
+    bm25_online = False
+    bm25_doc_count = 0
+    try:
+        bm25_online = bm25_index.index_exists(workspace_id)
+        if bm25_online:
+            bm25_doc_count = bm25_index.doc_count(workspace_id)
+    except Exception:
+        pass
+
+    # Qdrant
+    qdrant_online = False
+    vector_count = 0
+    try:
+        qdrant_online = store.collection_exists()
+        if qdrant_online:
+            vector_count = store.count_docs(workspace_id)
+    except Exception:
+        pass
+
+    # Graph (NetworkX)
+    graph_online = False
+    node_count = 0
+    edge_count = 0
+    try:
+        graph_online = neo4j_ops.workspace_graph_exists(workspace_id)
+        if graph_online:
+            stats = neo4j_ops.get_graph_stats(workspace_id)
+            node_count = stats.get("nodes", 0)
+            edge_count = stats.get("edges", 0)
+    except Exception:
+        pass
+
     return ok({
-        "bm25": True,
-        "faiss": True,     # Qdrant — keep key name for frontend compat
-        "neo4j": True,     # NetworkX — keep key name for frontend compat
-        "ingested_count": 0,  # Summed across all workspaces
+        "bm25": {"online": bm25_online, "doc_count": bm25_doc_count},
+        "qdrant": {"online": qdrant_online, "vector_count": vector_count},
+        "graph": {"online": graph_online, "node_count": node_count, "edge_count": edge_count},
     })
 
 
 @app.get("/api/status/refresh")
 @limiter.limit("60/minute")
-async def refresh_status(request: Request):
+async def refresh_status(request: Request, workspace_id: str = Query("default")):
     """Re-check engine readiness."""
-    return ok({
-        "bm25": True,
-        "faiss": True,
-        "neo4j": True,
-        "ingested_count": 0,
-    })
+    return await get_status(request, workspace_id)
 
 
 # ====================================================================== #
@@ -245,20 +400,42 @@ async def upload_sources(
     job_id = _make_job([p.name for p in saved_paths])
 
     def run_all():
-        for path in saved_paths:
+        total_files = len(saved_paths)
+        for idx, path in enumerate(saved_paths):
+            fname = path.name
             try:
-                run_pipeline(
-                    path,
-                    workspace_id,
-                    on_progress=lambda s, p: _update_job(job_id, s, p)
+                # Update per-file status
+                _update_file_status(job_id, fname, status="processing", stage="starting")
+
+                def file_progress(stage, pct):
+                    _update_file_status(job_id, fname, stage=stage)
+                    # Overall progress: combine file index and per-file pct
+                    overall = int(((idx * 100) + pct) / total_files)
+                    _update_job(job_id, f"{fname}: {stage}", min(overall, 99))
+
+                result = run_pipeline(path, workspace_id, on_progress=file_progress)
+                chunks = result.get("chunks", 0)
+                warning = result.get("warning")
+                _update_file_status(
+                    job_id, fname,
+                    status="done",
+                    stage="done",
+                    chunks=chunks,
+                    warning=warning,
                 )
             except Exception as e:
-                ingestion_jobs[job_id]["status"] = "failed"
-                ingestion_jobs[job_id]["error"] = str(e)
-                logger.error(f"Ingestion failed for {path.name}: {e}")
-                return
+                _update_file_status(
+                    job_id, fname,
+                    status="error",
+                    stage="failed",
+                    error=str(e),
+                )
+                logger.error(f"Ingestion failed for {fname}: {e}")
+
+        # Mark overall job done
         ingestion_jobs[job_id]["status"] = "done"
         ingestion_jobs[job_id]["progress"] = 100
+        ingestion_jobs[job_id]["stage"] = "done"
 
     background_tasks.add_task(run_all)
     return ok({"job_id": job_id, "status": "queued", "files": [p.name for p in saved_paths]})
@@ -557,18 +734,24 @@ async def delete_history(request: Request, entry_id: str):
 
 @app.get("/api/graph/nodes")
 @limiter.limit("60/minute")
-async def get_graph_nodes(request: Request, workspace_id: str = Query("default")):
+async def get_graph_nodes(
+    request: Request,
+    workspace_id: str = Query("default"),
+    min_frequency: int = Query(1, ge=1, description="Minimum entity frequency"),
+):
     """Fetch all nodes from the workspace knowledge graph."""
     validate_workspace_id(workspace_id)
 
     try:
-        raw_nodes = neo4j_ops.get_all_nodes(workspace_id)
+        raw_nodes = neo4j_ops.get_all_nodes(workspace_id, min_frequency=min_frequency)
         nodes = []
         for n in raw_nodes:
             nodes.append({
                 "id": n.get("id", ""),
                 "name": n.get("id", "Unknown"),
                 "group": n.get("label", "Entity"),
+                "frequency": n.get("frequency", 1),
+                "doc_ids": n.get("doc_ids", []),
             })
         return ok({"nodes": nodes, "total": len(nodes)})
     except Exception as e:
@@ -578,18 +761,24 @@ async def get_graph_nodes(request: Request, workspace_id: str = Query("default")
 
 @app.get("/api/graph/edges")
 @limiter.limit("60/minute")
-async def get_graph_edges(request: Request, workspace_id: str = Query("default")):
+async def get_graph_edges(
+    request: Request,
+    workspace_id: str = Query("default"),
+    min_frequency: int = Query(1, ge=1, description="Minimum node frequency"),
+    min_weight: float = Query(0.0, ge=0.0, description="Minimum edge weight"),
+):
     """Fetch all edges from the workspace knowledge graph."""
     validate_workspace_id(workspace_id)
 
     try:
-        raw_edges = neo4j_ops.get_all_edges(workspace_id)
+        raw_edges = neo4j_ops.get_all_edges(workspace_id, min_weight=min_weight, min_frequency=min_frequency)
         edges = []
         for e in raw_edges:
             edges.append({
                 "source": e.get("source", ""),
                 "target": e.get("target", ""),
                 "relation": e.get("relation", "co-occurs"),
+                "weight": e.get("weight", 1.0),
                 "source_name": e.get("source", ""),
                 "target_name": e.get("target", ""),
             })

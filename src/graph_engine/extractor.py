@@ -11,6 +11,7 @@ Co-occurrence edges replace LLM-extracted relationships.
 from gliner import GLiNER
 from config import GLINER_MODEL, ACADEMIC_ENTITY_LABELS
 import itertools
+import re
 
 _ner_model: GLiNER = None
 
@@ -25,19 +26,48 @@ def get_ner_model() -> GLiNER:
     return _ner_model
 
 
+def clean_entity_text(text: str) -> str | None:
+    """
+    Clean and validate entity text. Returns None if entity should be discarded.
+    Rejects: too short (<2 chars), too long (>5 words), URLs, pure numbers,
+    file paths, email addresses, and other noise.
+    """
+    text = text.strip()
+    if len(text) < 2:
+        return None
+    if len(text.split()) > 5:
+        return None
+    # Reject URLs, file paths, email addresses
+    if re.search(r'https?://', text) or re.search(r'[/\\]', text):
+        return None
+    if '@' in text:
+        return None
+    # Reject pure numbers / decimals
+    if re.match(r'^[\d.,\-]+$', text):
+        return None
+    # Reject single characters
+    if len(text) == 1:
+        return None
+    # Reject strings that are mostly non-alpha (noise)
+    alpha_ratio = sum(c.isalpha() for c in text) / len(text) if text else 0
+    if alpha_ratio < 0.5:
+        return None
+    return text.lower().strip()
+
+
 def extract_entities(text: str) -> list[dict]:
     """
     Extract named entities from a single text chunk.
     Returns: [{"text": str, "label": str}, ...]
-    Deduplicates by lowercased text.
+    Deduplicates by lowercased text, rejects noisy entities.
     """
     model = get_ner_model()
     raw = model.predict_entities(text, ACADEMIC_ENTITY_LABELS, threshold=0.5)
     seen = {}
     for e in raw:
-        key = e["text"].lower().strip()
-        if key and key not in seen:
-            seen[key] = {"text": key, "label": e["label"]}
+        cleaned = clean_entity_text(e["text"])
+        if cleaned and cleaned not in seen:
+            seen[cleaned] = {"text": cleaned, "label": e["label"]}
     return list(seen.values())
 
 

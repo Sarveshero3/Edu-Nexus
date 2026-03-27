@@ -1,94 +1,184 @@
-import os
-import logging
-from typing import Any, Dict, List, Optional
-from neo4j import GraphDatabase, Driver
-from neo4j.exceptions import ServiceUnavailable
-from dotenv import load_dotenv
-load_dotenv() 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("Neo4jConnector")
+"""
+Graph Database Layer — Edu Nexus
+==================================
+Replaces Neo4j with NetworkX + JSON file persistence.
+Each workspace gets its own graph file: data/artifacts/graphs/graph_{workspace_id}.json
 
-class Neo4jConnector:
-    _instance = None
-    _driver: Optional[Driver] = None
+The frontend API contract (/api/graph/nodes, /api/graph/edges, /api/graph/node/{name})
+remains identical — only the backend storage changes.
+"""
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(Neo4jConnector, cls).__new__(cls)
-        return cls._instance
+import json
+import networkx as nx
+from pathlib import Path
+from config import GRAPHS_DIR
 
-    def __init__(self):
-        if hasattr(self, '_initialized') and self._initialized:
-            return
-            
-        self._uri = os.getenv("NEO4J_URI")
-        self._username = os.getenv("NEO4J_USERNAME")
-        self._password = os.getenv("NEO4J_PASSWORD")
-        
-        self.connect()
-        self._initialized = True
 
-    def connect(self):
-        """Initializes the Neo4j driver."""
-        try:
-            if not all([self._uri, self._username, self._password]):
-                logger.warning("Missing Neo4j environment variables (NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)")
-                return
+def _graph_path(workspace_id: str) -> Path:
+    return GRAPHS_DIR / f"graph_{workspace_id}.json"
 
-            self._driver = GraphDatabase.driver(
-                self._uri, 
-                auth=(self._username, self._password)
-            )
-            logger.info("Neo4j driver initialized.")
-        except Exception as e:
-            logger.error(f"Failed to initialize Neo4j driver: {e}")
-            self._driver = None
 
-    def verify_connectivity(self) -> bool:
-        """Checks if the Neo4j database is reachable."""
-        if not self._driver:
-            logger.warning("Driver not initialized.")
-            return False
-            
-        try:
-            self._driver.verify_connectivity()
-            logger.info("Neo4j connectivity verified.")
-            return True
-        except ServiceUnavailable as e:
-            logger.error(f"Neo4j Service Unavailable: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Connectivity check failed: {e}")
-            return False
+def _load_graph(workspace_id: str) -> nx.Graph:
+    path = _graph_path(workspace_id)
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return nx.node_link_graph(data)
+    return nx.Graph()
 
-    def run_cypher(self, query: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """Executes a Cypher query safely."""
-        if not self._driver:
-            logger.error("Driver not authorized or initialized.")
-            return []
 
-        if params is None:
-            params = {}
+def _save_graph(workspace_id: str, G: nx.Graph) -> None:
+    path = _graph_path(workspace_id)
+    path.write_text(
+        json.dumps(nx.node_link_data(G), ensure_ascii=False),
+        encoding="utf-8"
+    )
 
-        results = []
-        try:
-            with self._driver.session() as session:
-                result = session.run(query, params)
-                results = [record.data() for record in result]
-            return results
-        except ServiceUnavailable as e:
-            logger.error(f"Service unavailable during query: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Query execution error: {e}")
-            raise
 
-    def close(self):
-        """Closes the driver connection."""
-        if self._driver:
-            self._driver.close()
-            logger.info("Neo4j driver closed.")
+def upsert_graph(workspace_id: str, nodes: list[dict], edges: list[dict]) -> None:
+    """
+    Merge new nodes and edges into existing workspace graph.
+    Nodes are keyed by 'id'. Edges are keyed by (source, target).
+    Existing nodes have their frequency and doc_ids merged (not overwritten).
+    """
+    G = _load_graph(workspace_id)
+
+    for node in nodes:
+        nid = node["id"]
+        if G.has_node(nid):
+            existing = G.nodes[nid]
+            existing["frequency"] = existing.get("frequency", 0) + node.get("frequency", 1)
+            for did in node.get("doc_ids", []):
+                if did not in existing.get("doc_ids", []):
+                    existing.setdefault("doc_ids", []).append(did)
+        else:
+            G.add_node(nid, **node)
+
+    for edge in edges:
+        s, t = edge["source"], edge["target"]
+        if G.has_edge(s, t):
+            existing = G.edges[s, t]
+            existing["weight"] = existing.get("weight", 0) + edge.get("weight", 1.0)
+            for did in edge.get("doc_ids", []):
+                if did not in existing.get("doc_ids", []):
+                    existing.setdefault("doc_ids", []).append(did)
+        else:
+            G.add_edge(s, t, **edge)
+
+    _save_graph(workspace_id, G)
+
+
+def delete_doc_from_graph(workspace_id: str, doc_id: str) -> None:
+    """
+    Remove all nodes and edges that belonged only to doc_id.
+    Nodes shared across multiple docs just have doc_id removed from their doc_ids list.
+    """
+    G = _load_graph(workspace_id)
+
+    nodes_to_remove = []
+    for nid, data in G.nodes(data=True):
+        doc_ids = data.get("doc_ids", [])
+        if doc_id in doc_ids:
+            doc_ids.remove(doc_id)
+            if not doc_ids:
+                nodes_to_remove.append(nid)
+
+    G.remove_nodes_from(nodes_to_remove)
+    _save_graph(workspace_id, G)
+
+
+def delete_workspace_graph(workspace_id: str) -> None:
+    path = _graph_path(workspace_id)
+    if path.exists():
+        path.unlink()
+
+
+def get_all_nodes(workspace_id: str, min_frequency: int = 1) -> list[dict]:
+    G = _load_graph(workspace_id)
+    nodes = []
+    for nid, data in G.nodes(data=True):
+        freq = data.get("frequency", 1)
+        if freq >= min_frequency:
+            nodes.append({"id": nid, **data})
+    return nodes
+
+
+def get_all_edges(workspace_id: str, min_weight: float = 0.0, min_frequency: int = 1) -> list[dict]:
+    G = _load_graph(workspace_id)
+    # Collect nodes that meet frequency threshold
+    valid_nodes = set()
+    for nid, data in G.nodes(data=True):
+        if data.get("frequency", 1) >= min_frequency:
+            valid_nodes.add(nid)
+
+    edges = []
+    for s, t, data in G.edges(data=True):
+        if s in valid_nodes and t in valid_nodes:
+            if data.get("weight", 1.0) >= min_weight:
+                edges.append({"source": s, "target": t, **data})
+    return edges
+
+
+def get_node_detail(workspace_id: str, node_name: str) -> dict:
+    G = _load_graph(workspace_id)
+    name_lower = node_name.lower().strip()
+
+    if not G.has_node(name_lower):
+        return {}
+
+    neighbors = []
+    for neighbor in G.neighbors(name_lower):
+        edge_data = G.edges[name_lower, neighbor]
+        neighbors.append({
+            "id": neighbor,
+            **G.nodes[neighbor],
+            "relation": edge_data.get("relation", "co-occurs"),
+            "weight": edge_data.get("weight", 1.0)
+        })
+
+    return {
+        "node": {"id": name_lower, **G.nodes[name_lower]},
+        "neighbors": neighbors
+    }
+
+
+def get_graph_stats(workspace_id: str) -> dict:
+    """Return basic graph statistics for health check."""
+    G = _load_graph(workspace_id)
+    return {
+        "nodes": G.number_of_nodes(),
+        "edges": G.number_of_edges(),
+    }
+
+
+def search_graph(workspace_id: str, query_entities: list[str]) -> list[dict]:
+    """
+    For each query entity, find it and its 2-hop neighborhood.
+    Used by orchestrator to enrich query context with related concepts.
+    Returns deduplicated list of nearby node dicts.
+    """
+    G = _load_graph(workspace_id)
+    found_nodes = set()
+    result = []
+
+    for entity in query_entities:
+        entity = entity.lower().strip()
+        if not G.has_node(entity):
+            continue
+
+        # 2-hop subgraph
+        subgraph_nodes = {entity}
+        for neighbor in G.neighbors(entity):
+            subgraph_nodes.add(neighbor)
+            for second_hop in G.neighbors(neighbor):
+                subgraph_nodes.add(second_hop)
+
+        for nid in subgraph_nodes:
+            if nid not in found_nodes:
+                found_nodes.add(nid)
+                result.append({"id": nid, **G.nodes[nid]})
+
+    return result
+
+
+def workspace_graph_exists(workspace_id: str) -> bool:
+    return _graph_path(workspace_id).exists()

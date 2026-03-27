@@ -4,6 +4,7 @@ import { ChevronRight, ChevronLeft, Send, Sparkles, FileText, Loader2, AlertCirc
 import { useQuery, useMutation } from '@tanstack/react-query'
 import PageTransition from '@/components/common/PageTransition'
 import GlassCard from '@/components/common/GlassCard'
+import MarkdownMessage from '@/components/common/MarkdownMessage'
 import { getSourceContent, getSourceFileUrl, sendChat, type ChunkData, type ChatResponse } from '@/lib/api'
 
 export default function Viewer() {
@@ -11,6 +12,18 @@ export default function Viewer() {
   const docName = decodeURIComponent(id || '')
   const ext = docName.split('.').pop()?.toLowerCase() || ''
   const isPdf = ext === 'pdf'
+
+  // Get workspace id from persisted store
+  const activeWorkspaceId = (() => {
+    try {
+      const stored = localStorage.getItem('edu-nexus-workspaces')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        return parsed?.state?.activeWorkspaceId || 'default'
+      }
+    } catch {}
+    return 'default'
+  })()
 
   const [chatInput, setChatInput] = useState('')
   const [page, setPage] = useState(0)
@@ -56,14 +69,14 @@ export default function Viewer() {
   const CHUNKS_PER_PAGE = 5
 
   // For non-PDFs: fetch chunks
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['source-content', docName],
-    queryFn: () => getSourceContent(docName),
+  const { data, isLoading, error } = useQuery<{ chunks: ChunkData[], name: string, total: number }>({
+    queryKey: ['source-content', docName, activeWorkspaceId],
+    queryFn: () => getSourceContent(docName, activeWorkspaceId) as any,
     enabled: !!docName && !isPdf,
   })
 
   const chatMutation = useMutation({
-    mutationFn: (query: string) => sendChat(query, [docName], true),
+    mutationFn: (query: string) => sendChat(query, activeWorkspaceId, [docName]),
     onSuccess: (data: ChatResponse) => {
       setChatMessages((prev) => [...prev, { role: 'ai', text: data.answer }])
     },
@@ -139,7 +152,7 @@ export default function Viewer() {
           {isPdf ? (
             /* PDF Viewer — native browser PDF rendering */
             <iframe
-              src={getSourceFileUrl(docName)}
+              src={`${getSourceFileUrl(docName, activeWorkspaceId)}&token=${localStorage.getItem('edu-nexus-session-token') || ''}`}
               className="flex-1 w-full bg-[#1a1a2e]"
               title={docName}
               style={{ border: 'none' }}
@@ -179,7 +192,7 @@ export default function Viewer() {
               {!isLoading && pageChunks.length > 0 && (
                 <div className="flex flex-col gap-3">
                   {pageChunks.map((chunk: ChunkData, i: number) => (
-                    <GlassCard key={chunk.id} hover={false} className="p-5">
+                    <GlassCard key={`chunk-${page * CHUNKS_PER_PAGE + i}`} hover={false} className="p-5">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-accent-cyan text-[11px] font-semibold">Chunk {page * CHUNKS_PER_PAGE + i + 1}</span>
                       </div>
@@ -238,13 +251,15 @@ export default function Viewer() {
                     <Sparkles className="text-accent-cyan" size={12} />
                   </div>
                 )}
-                <div className={
-                  msg.role === 'user'
-                    ? 'bg-gradient-to-br from-accent-cyan to-accent-purple text-white px-4 py-2.5 rounded-[12px] rounded-br-[4px] text-xs max-w-[80%]'
-                    : 'glass-card px-4 py-2.5 rounded-[12px] rounded-bl-[4px] text-xs text-white/90 max-w-[80%] whitespace-pre-line'
-                }>
-                  {msg.text}
-                </div>
+                {msg.role === 'user' ? (
+                  <div className="bg-gradient-to-br from-accent-cyan to-accent-purple text-white px-4 py-2.5 rounded-[12px] rounded-br-[4px] text-xs max-w-[80%]">
+                    {msg.text}
+                  </div>
+                ) : (
+                  <div className="glass-card px-4 py-3 rounded-[12px] rounded-bl-[4px] max-w-[85%]">
+                    <MarkdownMessage content={msg.text} className="text-xs" />
+                  </div>
+                )}
               </div>
             ))}
             {chatMutation.isPending && (

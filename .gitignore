@@ -73,3 +73,10 @@ desktop.ini
 *.log
 *.bak
 skills-lock.json
+
+# ── Session Data ──
+sessions/
+.sessions/
+*.session
+*.session-journal
+session.db

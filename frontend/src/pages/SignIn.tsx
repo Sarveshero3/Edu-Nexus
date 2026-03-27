@@ -1,16 +1,17 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Sparkles, ArrowRight, Lock } from 'lucide-react'
+import { Sparkles, ArrowRight, Lock, UserX } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useAuth } from '@/stores/authStore'
+import { authStatus } from '@/lib/api'
 import PageTransition from '@/components/common/PageTransition'
 import BlurFade from '@/components/magicui/BlurFade'
 import AnimatedGradientText from '@/components/magicui/AnimatedGradientText'
 
 const schema = z.object({
-  email: z.string().email('Please enter a valid email'),
+  username: z.string().min(2, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
 })
 type FormData = z.infer<typeof schema>
@@ -19,10 +20,28 @@ export default function SignIn() {
   const navigate = useNavigate()
   const signIn = useAuth((s) => s.signIn)
   const isLoading = useAuth((s) => s.isLoading)
+  const [error, setError] = useState('')
+  const [existingUser, setExistingUser] = useState<string | null>(null)
+  const [noAccount, setNoAccount] = useState(false)
 
   const cardRef = useRef<HTMLDivElement>(null)
   const [glowPos, setGlowPos] = useState({ x: 50, y: 50 })
   const [isHovering, setIsHovering] = useState(false)
+
+  // Check if user exists
+  useEffect(() => {
+    authStatus().then((status) => {
+      if (status.registered) {
+        setExistingUser(status.username)
+        // If already logged in, redirect
+        if (status.logged_in) {
+          navigate('/dashboard/sources', { replace: true })
+        }
+      } else {
+        setNoAccount(true)
+      }
+    }).catch(() => {})
+  }, [navigate])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!cardRef.current) return
@@ -38,8 +57,13 @@ export default function SignIn() {
   })
 
   const onSubmit = async (data: FormData) => {
-    await signIn(data.email, data.password)
-    navigate('/dashboard/sources')
+    setError('')
+    try {
+      await signIn(data.username, data.password)
+      navigate('/dashboard/sources')
+    } catch (err: any) {
+      setError(err?.message || 'Invalid credentials')
+    }
   }
 
   return (
@@ -87,48 +111,70 @@ export default function SignIn() {
                 Back
               </AnimatedGradientText>
             </h1>
-            <p className="text-white/80 text-base mb-8 font-medium" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
-              Sign in to access your knowledge graphs.
-            </p>
 
-            {/* Two-column layout for wider card */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2.5 block">Email</label>
-                <input
-                  {...register('email')}
-                  placeholder="your@university.edu"
-                  className="w-full bg-white/[0.10] border border-white/[0.15] rounded-xl px-4 py-4 text-white text-base font-medium outline-none focus:border-cyan-500/60 focus:bg-white/[0.12] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/40 backdrop-blur-sm"
-                />
-                {errors.email && <p className="text-red-400 text-xs mt-1.5 font-medium">{errors.email.message}</p>}
-              </div>
-              <div>
-                <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2.5 block">Password</label>
-                <input
-                  {...register('password')}
-                  type="password"
-                  placeholder="••••••••"
-                  className="w-full bg-white/[0.10] border border-white/[0.15] rounded-xl px-4 py-4 text-white text-base font-medium outline-none focus:border-cyan-500/60 focus:bg-white/[0.12] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/40 backdrop-blur-sm"
-                />
-                <div className="flex justify-end mt-2">
-                  <Link to="/forgot-password" className="text-cyan-400 text-sm font-medium hover:text-cyan-300 transition-colors">
-                    Forgot password?
-                  </Link>
+            {/* Welcome back hint */}
+            {existingUser && (
+              <p className="text-white/80 text-base mb-6 font-medium" style={{ textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
+                Welcome back, <span className="text-cyan-400 font-semibold">{existingUser}</span>. Sign in to access your knowledge graphs.
+              </p>
+            )}
+
+            {/* No account warning */}
+            {noAccount && (
+              <div className="mb-6 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <div className="flex items-center gap-2">
+                  <UserX className="text-amber-400" size={16} />
+                  <p className="text-amber-300 text-sm font-medium">No account found on this machine.</p>
                 </div>
-                {errors.password && <p className="text-red-400 text-xs mt-1 font-medium">{errors.password.message}</p>}
+                <p className="text-white/60 text-xs mt-1">
+                  <Link to="/sign-up" className="text-cyan-400 hover:text-cyan-300 font-bold">Create an account</Link> to get started.
+                </p>
               </div>
-            </div>
+            )}
 
-            <button
-              type="submit"
-              onClick={handleSubmit(onSubmit)}
-              disabled={isLoading}
-              className="group relative w-full flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold text-base shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed mt-6"
-            >
-              <Lock size={18} />
-              {isLoading ? 'Signing in...' : 'Sign In'}
-              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-            </button>
+            {/* Error */}
+            {error && (
+              <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                <p className="text-red-400 text-sm">{error}</p>
+              </div>
+            )}
+
+            {!noAccount && (
+              <form onSubmit={handleSubmit(onSubmit)}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div>
+                    <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2.5 block">Username</label>
+                    <input
+                      {...register('username')}
+                      defaultValue={existingUser || ''}
+                      placeholder="Your username"
+                      className="w-full bg-white/[0.10] border border-white/[0.15] rounded-xl px-4 py-4 text-white text-base font-medium outline-none focus:border-cyan-500/60 focus:bg-white/[0.12] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/40 backdrop-blur-sm"
+                    />
+                    {errors.username && <p className="text-red-400 text-xs mt-1.5 font-medium">{errors.username.message}</p>}
+                  </div>
+                  <div>
+                    <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2.5 block">Password</label>
+                    <input
+                      {...register('password')}
+                      type="password"
+                      placeholder="••••••••"
+                      className="w-full bg-white/[0.10] border border-white/[0.15] rounded-xl px-4 py-4 text-white text-base font-medium outline-none focus:border-cyan-500/60 focus:bg-white/[0.12] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/40 backdrop-blur-sm"
+                    />
+                    {errors.password && <p className="text-red-400 text-xs mt-1 font-medium">{errors.password.message}</p>}
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="group relative w-full flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold text-base shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all duration-300 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed mt-6"
+                >
+                  <Lock size={18} />
+                  {isLoading ? 'Signing in...' : 'Sign In'}
+                  <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                </button>
+              </form>
+            )}
 
             <p className="text-white/60 text-base mt-6 font-medium">
               Don't have an account?{' '}

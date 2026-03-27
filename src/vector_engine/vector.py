@@ -1,88 +1,56 @@
-import os
-from langchain_community.vectorstores import FAISS
-from langchain_huggingface import HuggingFaceEmbeddings
+"""
+Vector Utilities — Edu Nexus
+==============================
+Embedding generation using sentence-transformers.
+FAISS/LangChain dependencies removed — Qdrant is now the vector backend.
+"""
 
-# Try importing splitter if available
-try:
-    from src.splitter.textSplitter import chunk_text
-except Exception:
-    chunk_text = None
+from __future__ import annotations
 
+import logging
+from typing import List
 
-class VectorStoreManager:
-    def __init__(self, db_path="data/artifacts/faiss_index"):
-        self.db_path = db_path
-        self.embedding_model = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
-        self.vector_db = None
+import numpy as np
 
-    # ---------- CREATE DATABASE ----------
-    def create_database(self, chunks):
-        print("Creating FAISS index...")
-        self.vector_db = FAISS.from_texts(chunks, self.embedding_model)
+from config import EMBEDDING_MODEL
 
-        os.makedirs(self.db_path, exist_ok=True)
-        self.vector_db.save_local(self.db_path)
+logger = logging.getLogger("VectorUtils")
 
-        print(f"Saved FAISS index at {self.db_path}")
-
-    # ---------- LOAD DATABASE ----------
-    def load_database(self):
-        print("Loading FAISS index...")
-        self.vector_db = FAISS.load_local(
-            self.db_path,
-            self.embedding_model,
-            allow_dangerous_deserialization=True
-        )
-
-    # ---------- SEARCH ----------
-    def search(self, query, k=5):
-        if self.vector_db is None:
-            self.load_database()
-
-        docs = self.vector_db.similarity_search(query, k=k)
-        return [d.page_content for d in docs]
+_model = None
 
 
-# ================================
-# TEST SECTION (Dummy + Splitter)
-# ================================
-if __name__ == "__main__":
+def _get_model():
+    """Lazy-load the SentenceTransformer model on first call."""
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+        logger.info(f"Loading embedding model: {EMBEDDING_MODEL}")
+        _model = SentenceTransformer(EMBEDDING_MODEL)
+    return _model
 
-    manager = VectorStoreManager()
 
-    print("\n=== Dummy Test ===")
+def embed_chunks(texts: List[str]) -> List[List[float]]:
+    """
+    Generate L2-normalised embeddings for a list of texts.
+    Returns a list of float lists (one embedding per text).
+    """
+    model = _get_model()
+    embeddings = model.encode(
+        texts,
+        show_progress_bar=False,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+    )
+    return embeddings.astype(np.float32).tolist()
 
-    dummy_chunks = [
-        "Recursion is when a function calls itself.",
-        "Neural networks are inspired by the human brain.",
-        "Computer networking connects devices together.",
-        "Operating systems manage hardware and software.",
-        "Databases store and organize data efficiently."
-    ]
 
-    manager.create_database(dummy_chunks)
-
-    results = manager.search("What is a function calling itself?")
-    print("\nResults:")
-    for r in results:
-        print("-", r)
-
-    # OPTIONAL real splitter test
-    if chunk_text:
-        print("\n=== Splitter Test ===")
-
-        sample_text = """
-        Artificial Intelligence is used in healthcare and robotics.
-        Machine learning learns from data.
-        Deep learning uses neural networks.
-        """ * 40
-
-        chunks = chunk_text(sample_text)
-        manager.create_database(chunks)
-
-        results = manager.search("Where is AI used?")
-        print("\nResults from splitter:")
-        for r in results:
-            print("-", r)
+def embed_query(text: str) -> List[float]:
+    """Generate a single embedding vector for a query string."""
+    model = _get_model()
+    embedding = model.encode(
+        [text],
+        show_progress_bar=False,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+    )
+    return embedding[0].astype(np.float32).tolist()

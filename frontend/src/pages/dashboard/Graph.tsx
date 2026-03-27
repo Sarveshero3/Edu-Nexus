@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import PageTransition from '@/components/common/PageTransition'
 import GlassCard from '@/components/common/GlassCard'
 import { getGraphNodes, getGraphEdges, getGraphNodeDetail, type GraphNode, type GraphEdge, type NodeDetail } from '@/lib/api'
+import { useWorkspace } from '@/stores/workspaceStore'
 
 /**
  * Graph explorer with improved labeling and meaningful connections.
@@ -384,22 +385,13 @@ export default function Graph() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [layout, setLayout] = useState<LayoutType>('force')
   const [showLayoutMenu, setShowLayoutMenu] = useState(false)
-  const [minFrequency, setMinFrequency] = useState(2)
+  const [minFrequency, setMinFrequency] = useState(1)
   const [showFilters, setShowFilters] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const { width, height } = useContainerSize(containerRef)
 
-  // Get workspace id
-  const activeWorkspaceId = (() => {
-    try {
-      const stored = localStorage.getItem('edu-nexus-workspaces')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        return parsed?.state?.activeWorkspaceId || 'default'
-      }
-    } catch {}
-    return 'default'
-  })()
+  // Get workspace id from Zustand store (consistent with other pages)
+  const activeWorkspaceId = useWorkspace((s) => s.activeWorkspaceId) || 'default'
 
   const { data: nodesData, isLoading: nodesLoading, error: nodesError } = useQuery({
     queryKey: ['graph-nodes', minFrequency, activeWorkspaceId],

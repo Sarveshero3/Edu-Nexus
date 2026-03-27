@@ -63,13 +63,14 @@ export default function Sources() {
 
   const noWorkspace = !activeWorkspaceId
 
-  // Upload stopwatch
+  // Upload stopwatch — resilient to sleep/backgrounding
   useEffect(() => {
     if (!isUploading || !uploadStartTime) { setUploadElapsed(0); return }
-    const interval = setInterval(() => {
-      setUploadElapsed(Math.floor((Date.now() - uploadStartTime) / 1000))
-    }, 1000)
-    return () => clearInterval(interval)
+    const update = () => setUploadElapsed(Math.floor((Date.now() - uploadStartTime) / 1000))
+    const interval = setInterval(update, 1000)
+    const onVisible = () => { if (document.visibilityState === 'visible') update() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible) }
   }, [isUploading, uploadStartTime])
 
   // Rate limit timer
@@ -222,6 +223,8 @@ export default function Sources() {
               queryClient.invalidateQueries({ queryKey: ['sources', activeWorkspaceId] })
               queryClient.invalidateQueries({ queryKey: ['suggestions'] })
               queryClient.invalidateQueries({ queryKey: ['engineStatus'] })
+              queryClient.invalidateQueries({ queryKey: ['graph-nodes'] })
+              queryClient.invalidateQueries({ queryKey: ['graph-edges'] })
             }
           } catch {
             clearInterval(pollInterval)
@@ -235,6 +238,8 @@ export default function Sources() {
           clearInterval(pollInterval)
           setIsUploading(false)
           queryClient.invalidateQueries({ queryKey: ['sources', activeWorkspaceId] })
+          queryClient.invalidateQueries({ queryKey: ['graph-nodes'] })
+          queryClient.invalidateQueries({ queryKey: ['graph-edges'] })
         }, 300_000)
 
         return // Polling handles isUploading

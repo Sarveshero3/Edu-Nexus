@@ -142,8 +142,9 @@ function applyLayout(
     })
   }
 
-  // Force layout — random initial positions, simulation will settle them
-  const spread = Math.max(width, height) * 0.8
+  // Force layout — spread scales with node count
+  const scaleFactor = Math.max(1, Math.sqrt(rawNodes.length / 50))
+  const spread = Math.max(width, height) * scaleFactor
   return rawNodes.map((n) => ({
     ...n,
     x: cx + (Math.random() - 0.5) * spread,
@@ -151,6 +152,106 @@ function applyLayout(
     vx: 0, vy: 0,
     radius: Math.max(6, Math.min(18, 6 + (n.frequency || 1) * 1.5)),
   }))
+}
+
+// ── Barnes-Hut Quadtree for O(n log n) repulsion ────────────────
+interface QTNode {
+  cx: number; cy: number; mass: number;
+  minX: number; minY: number; maxX: number; maxY: number;
+  children: (QTNode | null)[];
+  nodeIdx: number; // -1 for internal nodes
+}
+
+function buildQuadtree(nodes: SimNode[]): QTNode | null {
+  if (nodes.length === 0) return null
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const n of nodes) {
+    if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x
+    if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y
+  }
+  // Pad to square
+  const size = Math.max(maxX - minX, maxY - minY, 1) * 1.01
+  const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2
+  minX = midX - size / 2; maxX = midX + size / 2
+  minY = midY - size / 2; maxY = midY + size / 2
+
+  function insertNode(root: QTNode | null, idx: number, nx: number, ny: number,
+    rMinX: number, rMinY: number, rMaxX: number, rMaxY: number, depth: number): QTNode {
+    if (depth > 40) {
+      return { cx: nx, cy: ny, mass: 1, minX: rMinX, minY: rMinY, maxX: rMaxX, maxY: rMaxY, children: [], nodeIdx: idx }
+    }
+
+    if (!root) {
+      return { cx: nx, cy: ny, mass: 1, minX: rMinX, minY: rMinY, maxX: rMaxX, maxY: rMaxY, children: [], nodeIdx: idx }
+    }
+
+    const midXR = (rMinX + rMaxX) / 2, midYR = (rMinY + rMaxY) / 2
+
+    if (root.nodeIdx >= 0) {
+      // Leaf — split
+      const oldIdx = root.nodeIdx
+      const oldX = root.cx, oldY = root.cy
+      root.nodeIdx = -1
+      root.children = [null, null, null, null]
+      root = reinsert(root, oldIdx, oldX, oldY, rMinX, rMinY, rMaxX, rMaxY, midXR, midYR, depth)
+      root = reinsert(root, idx, nx, ny, rMinX, rMinY, rMaxX, rMaxY, midXR, midYR, depth)
+    } else {
+      if (root.children.length === 0) root.children = [null, null, null, null]
+      root = reinsert(root, idx, nx, ny, rMinX, rMinY, rMaxX, rMaxY, midXR, midYR, depth)
+    }
+
+    root.cx = (root.cx * root.mass + nx) / (root.mass + 1)
+    root.cy = (root.cy * root.mass + ny) / (root.mass + 1)
+    root.mass += 1
+    return root
+  }
+
+  function reinsert(root: QTNode, idx: number, nx: number, ny: number,
+    rMinX: number, rMinY: number, rMaxX: number, rMaxY: number,
+    midXR: number, midYR: number, depth: number): QTNode {
+    const quadrant = (nx > midXR ? 1 : 0) + (ny > midYR ? 2 : 0)
+    const qMinX = quadrant & 1 ? midXR : rMinX
+    const qMaxX = quadrant & 1 ? rMaxX : midXR
+    const qMinY = quadrant & 2 ? midYR : rMinY
+    const qMaxY = quadrant & 2 ? rMaxY : midYR
+    root.children[quadrant] = insertNode(root.children[quadrant], idx, nx, ny, qMinX, qMinY, qMaxX, qMaxY, depth + 1)
+    return root
+  }
+
+  let tree: QTNode | null = null
+  for (let i = 0; i < nodes.length; i++) {
+    tree = insertNode(tree, i, nodes[i].x, nodes[i].y, minX, minY, maxX, maxY, 0)
+  }
+  return tree
+}
+
+function applyBarnesHut(tree: QTNode | null, node: SimNode, idx: number, repulsion: number, theta: number): { fx: number; fy: number } {
+  if (!tree || tree.mass === 0) return { fx: 0, fy: 0 }
+
+  const dx = tree.cx - node.x, dy = tree.cy - node.y
+  const distSq = dx * dx + dy * dy
+  const size = tree.maxX - tree.minX
+
+  // If leaf and it's this node, skip
+  if (tree.nodeIdx === idx) return { fx: 0, fy: 0 }
+
+  // If leaf or far enough away, treat as single body
+  if (tree.nodeIdx >= 0 || (size * size < theta * theta * distSq)) {
+    const dist = Math.sqrt(distSq) || 1
+    const force = -(repulsion * tree.mass) / (dist * dist)
+    return { fx: (dx / dist) * force, fy: (dy / dist) * force }
+  }
+
+  // Otherwise recurse into children
+  let fx = 0, fy = 0
+  for (const child of tree.children) {
+    if (child) {
+      const f = applyBarnesHut(child, node, idx, repulsion, theta)
+      fx += f.fx; fy += f.fy
+    }
+  }
+  return { fx, fy }
 }
 
 // ── Hooks ────────────────────────────────────────────────────────
@@ -194,59 +295,75 @@ function useForceSimulation(
       target: nodesRef.current.findIndex((n) => n.id === e.target),
     })).filter((e) => e.source >= 0 && e.target >= 0)
 
-    const idealDist = Math.max(80, Math.min(300, 4000 / Math.sqrt(initial.length)))
-    const repulsionCutoff = idealDist * 4
-    let frameCount = 0
+    const count = initial.length
+    // Scale forces with node count
+    const idealDist = Math.max(60, Math.min(400, 6000 / Math.sqrt(count)))
+    const repulsion = Math.max(200, Math.min(5000, count * 3))
+    const centerGravity = Math.max(0.00005, 0.0005 / Math.sqrt(count / 50))
+    const useBH = count > 200 // Use Barnes-Hut for large graphs
+    const theta = 0.7 // Barnes-Hut accuracy (lower = more accurate)
 
     const tick = () => {
-      const alpha = Math.max(0.001, 1 - tickRef.current / 300)
+      const alpha = Math.max(0.001, 1 - tickRef.current / 400)
       tickRef.current++
       const ns = nodesRef.current
 
+      // Center gravity — very weak for large graphs
       for (const node of ns) {
-        node.vx += (width / 2 - node.x) * 0.0003 * alpha
-        node.vy += (height / 2 - node.y) * 0.0003 * alpha
+        node.vx += (width / 2 - node.x) * centerGravity * alpha
+        node.vy += (height / 2 - node.y) * centerGravity * alpha
       }
 
-      for (let i = 0; i < ns.length; i++) {
-        for (let j = i + 1; j < ns.length; j++) {
-          const a = ns[i], b = ns[j]
-          let dx = b.x - a.x, dy = b.y - a.y
-          const distSq = dx * dx + dy * dy
-          if (distSq > repulsionCutoff * repulsionCutoff) continue
-          const dist = Math.sqrt(distSq) || 1
-          const force = (350 * alpha) / (dist * dist)
-          dx *= force; dy *= force
-          a.vx -= dx; a.vy -= dy
-          b.vx += dx; b.vy += dy
+      // Repulsion — Barnes-Hut for large graphs, brute force for small
+      if (useBH) {
+        const tree = buildQuadtree(ns)
+        for (let i = 0; i < ns.length; i++) {
+          const f = applyBarnesHut(tree, ns[i], i, repulsion * alpha, theta)
+          ns[i].vx += f.fx
+          ns[i].vy += f.fy
+        }
+      } else {
+        const repulsionCutoff = idealDist * 5
+        for (let i = 0; i < ns.length; i++) {
+          for (let j = i + 1; j < ns.length; j++) {
+            const a = ns[i], b = ns[j]
+            let dx = b.x - a.x, dy = b.y - a.y
+            const distSq = dx * dx + dy * dy
+            if (distSq > repulsionCutoff * repulsionCutoff) continue
+            const dist = Math.sqrt(distSq) || 1
+            const force = (repulsion * alpha) / (dist * dist)
+            dx *= force; dy *= force
+            a.vx -= dx; a.vy -= dy
+            b.vx += dx; b.vy += dy
+          }
         }
       }
 
+      // Edge attraction
       for (const { source, target } of edgeIndex) {
         const a = ns[source], b = ns[target]
         if (!a || !b) continue
         const dx = b.x - a.x, dy = b.y - a.y
         const dist = Math.sqrt(dx * dx + dy * dy) || 1
-        const force = (dist - idealDist) * 0.004 * alpha
+        const force = (dist - idealDist) * 0.003 * alpha
         const fx = (dx / dist) * force, fy = (dy / dist) * force
         a.vx += fx; a.vy += fy
         b.vx -= fx; b.vy -= fy
       }
 
+      // Velocity decay
+      const damping = count > 500 ? 0.75 : 0.82
       for (const node of ns) {
-        node.vx *= 0.82
-        node.vy *= 0.82
+        node.vx *= damping
+        node.vy *= damping
         node.x += node.vx
         node.y += node.vy
       }
 
-      frameCount++
-      if (frameCount % 3 === 0) setNodes([...ns])
+      setNodes([...ns])
 
       if (alpha > 0.002) {
         rafRef.current = requestAnimationFrame(tick)
-      } else {
-        setNodes([...ns])
       }
     }
 

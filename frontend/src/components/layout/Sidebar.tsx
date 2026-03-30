@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/stores/authStore'
 import { useSidebar } from '@/stores/sidebarStore'
-import { useWorkspace } from '@/stores/workspaceStore'
+import { useWorkspace, MAX_WORKSPACES, MAX_CHATS_PER_WORKSPACE } from '@/stores/workspaceStore'
 import { cn } from '@/lib/utils'
 import { useState, useRef, useEffect, useCallback } from 'react'
 
@@ -164,15 +164,18 @@ export default function Sidebar() {
                     <span className="text-[10px] text-text-muted mr-2">
                       {ws.sourceNames.length} docs
                     </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteWorkspace(ws.id)
-                      }}
-                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 p-0.5"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                    {workspaces.length > 1 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteWorkspace(ws.id)
+                        }}
+                        className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 p-0.5"
+                        title="Delete workspace"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
                   </div>
                 ))}
 
@@ -193,6 +196,10 @@ export default function Sidebar() {
                     <button onClick={() => { setShowNewWs(false); setNewWsName('') }} className="text-red-400 hover:text-red-300 p-1">
                       <X size={14} />
                     </button>
+                  </div>
+                ) : workspaces.length >= MAX_WORKSPACES ? (
+                  <div className="w-full px-3 py-2 text-sm text-text-muted border-t border-border-subtle text-center">
+                    {MAX_WORKSPACES}/{MAX_WORKSPACES} workspaces
                   </div>
                 ) : (
                   <button
@@ -237,7 +244,7 @@ export default function Sidebar() {
                 <p className="text-text-muted text-[10px] font-semibold tracking-widest uppercase">
                   CHATS
                 </p>
-                {activeWorkspaceId && (
+                {activeWorkspaceId && (activeWs?.chatSessions.length || 0) < MAX_CHATS_PER_WORKSPACE && (
                   <button
                     onClick={() => {
                       if (activeWorkspaceId) {
@@ -251,6 +258,11 @@ export default function Sidebar() {
                   >
                     <Plus size={14} />
                   </button>
+                )}
+                {activeWorkspaceId && (activeWs?.chatSessions.length || 0) >= MAX_CHATS_PER_WORKSPACE && (
+                  <span className="text-text-muted text-[9px]" title={`Max ${MAX_CHATS_PER_WORKSPACE} chats`}>
+                    {MAX_CHATS_PER_WORKSPACE}/{MAX_CHATS_PER_WORKSPACE}
+                  </span>
                 )}
               </div>
             )}

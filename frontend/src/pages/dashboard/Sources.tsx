@@ -181,9 +181,9 @@ export default function Sources() {
       if (result.job_id) {
         const jobId = result.job_id
         // Add all files to workspace immediately
-        for (const r of result.results) {
+        for (const filename of (result.files || [])) {
           if (activeWorkspaceId) {
-            addSourceToWorkspace(activeWorkspaceId, r.filename)
+            addSourceToWorkspace(activeWorkspaceId, filename)
           }
         }
         setUploadJobs(jobs.map((j) => ({
@@ -245,11 +245,20 @@ export default function Sources() {
         return // Polling handles isUploading
       }
 
-      // Non-job response (sync upload)
+      // Non-job response (sync upload — fallback)
       setUploadJobs(
         jobs.map((j) => {
-          const r = result.results.find((res) => res.filename === j.file.name)
-          if (!r) return { ...j, status: 'error' as const, message: 'Not found in results' }
+          const results = result.results || []
+          const r = results.find((res: any) => res.filename === j.file.name)
+          if (!r) {
+            // If no results array, try files array and mark as done
+            const inFiles = (result.files || []).includes(j.file.name)
+            if (inFiles) {
+              if (activeWorkspaceId) addSourceToWorkspace(activeWorkspaceId, j.file.name)
+              return { ...j, status: 'done' as const, message: 'Uploaded' }
+            }
+            return { ...j, status: 'error' as const, message: 'Not found in results' }
+          }
           if (r.status === 'ok') {
             if (activeWorkspaceId) {
               addSourceToWorkspace(activeWorkspaceId, r.filename)
@@ -688,12 +697,12 @@ export default function Sources() {
 
               {/* Upload stopwatch */}
               {isUploading && (
-                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 mb-4">
-                  <Clock className="text-cyan-400 animate-pulse" size={14} />
-                  <span className="text-cyan-400 text-xs font-mono font-bold">
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg mb-4" style={{ background: 'color-mix(in srgb, var(--accent-cyan) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--accent-cyan) 25%, transparent)' }}>
+                  <Clock className="animate-pulse" style={{ color: 'var(--accent-cyan)' }} size={14} />
+                  <span className="text-xs font-mono font-bold" style={{ color: 'var(--accent-cyan)' }}>
                     {Math.floor(uploadElapsed / 60)}:{String(uploadElapsed % 60).padStart(2, '0')}
                   </span>
-                  <span className="text-cyan-400/60 text-xs">elapsed</span>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>elapsed</span>
                 </div>
               )}
 

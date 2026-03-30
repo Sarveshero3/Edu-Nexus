@@ -67,7 +67,7 @@ export default function SignIn() {
   }
 
   return (
-    <PageTransition className="min-h-screen flex items-center justify-center px-6 py-12">
+    <PageTransition className="min-h-screen flex items-center justify-center px-6 py-12 text-3d">
       <BlurFade delay={0.1} inView={false}>
         <div
           ref={cardRef}

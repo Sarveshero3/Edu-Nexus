@@ -65,7 +65,7 @@ export default function SignUp() {
     setError('')
     try {
       await signUp(data.name, data.password)
-      navigate('/onboarding')
+      navigate('/setup-workspace')
     } catch (err: any) {
       setError(err?.message || 'Registration failed')
     }
@@ -87,7 +87,7 @@ export default function SignUp() {
   }
 
   return (
-    <PageTransition className="h-screen flex items-center justify-center px-6">
+    <PageTransition className="h-screen flex items-center justify-center px-6 text-3d">
       <BlurFade delay={0.1} inView={false}>
         <div
           ref={cardRef}

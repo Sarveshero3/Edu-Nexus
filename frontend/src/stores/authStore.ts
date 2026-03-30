@@ -18,6 +18,7 @@ interface AuthState {
   user: User | null
   token: string | null
   isLoading: boolean
+  isNewUser: boolean
   signIn: (username: string, password: string) => Promise<void>
   signUp: (username: string, password: string) => Promise<void>
   signOut: () => Promise<void>
@@ -32,6 +33,7 @@ export const useAuth = create<AuthState>()(
       user: null,
       token: null,
       isLoading: false,
+      isNewUser: false,
 
       signIn: async (username: string, password: string) => {
         set({ isLoading: true })
@@ -44,7 +46,7 @@ export const useAuth = create<AuthState>()(
             memberSince: new Date().toISOString(),
           }
           localStorage.setItem('edu-nexus-session-token', data.token)
-          set({ user, token: data.token, isLoading: false })
+          set({ user, token: data.token, isLoading: false, isNewUser: false })
         } catch (err: any) {
           set({ isLoading: false })
           throw err
@@ -64,7 +66,7 @@ export const useAuth = create<AuthState>()(
           // Clean slate — reset workspace store in memory and localStorage
           useWorkspace.getState().clearAll()
           localStorage.setItem('edu-nexus-session-token', data.token)
-          set({ user, token: data.token, isLoading: false })
+          set({ user, token: data.token, isLoading: false, isNewUser: true })
         } catch (err: any) {
           set({ isLoading: false })
           throw err

@@ -12,6 +12,7 @@ import ForgotPassword from '@/pages/ForgotPassword'
 import Docs from '@/pages/Docs'
 import NotFound from '@/pages/NotFound'
 import Onboarding from '@/pages/Onboarding'
+import SetupWorkspace from '@/pages/SetupWorkspace'
 import Sources from '@/pages/dashboard/Sources'
 import Chat from '@/pages/dashboard/Chat'
 import Graph from '@/pages/dashboard/Graph'
@@ -35,7 +36,8 @@ export default function App() {
 
         <Route path="/docs" element={<Docs />} />
 
-        {/* Protected: Onboarding */}
+        {/* Protected: Setup + Onboarding */}
+        <Route path="/setup-workspace" element={<AuthGuard><SetupWorkspace /></AuthGuard>} />
         <Route path="/onboarding" element={<AuthGuard><Onboarding /></AuthGuard>} />
 
         {/* Protected: Dashboard routes with AppShell */}

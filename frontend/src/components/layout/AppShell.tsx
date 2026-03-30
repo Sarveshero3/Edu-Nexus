@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import Sidebar from './Sidebar'
 import { useSidebar } from '@/stores/sidebarStore'
-import { useWorkspace } from '@/stores/workspaceStore'
 import { useTheme, applyTheme } from '@/stores/themeStore'
 
 interface AppShellProps {
@@ -12,9 +11,6 @@ export default function AppShell({ children }: AppShellProps) {
   const collapsed = useSidebar((s) => s.collapsed)
   const sidebarWidth = useSidebar((s) => s.width)
   
-  const workspaces = useWorkspace((s) => s.workspaces)
-  const createWorkspace = useWorkspace((s) => s.createWorkspace)
-  
   const theme = useTheme((s) => s.theme)
   const accentColor = useTheme((s) => s.accentColor)
 
@@ -23,13 +19,8 @@ export default function AppShell({ children }: AppShellProps) {
     applyTheme(theme, accentColor)
   }, [theme, accentColor])
 
-  useEffect(() => {
-    // If user has no workspaces, automatically create a default one
-    // This allows resuming a session seamlessly without an intrusive modal
-    if (workspaces.length === 0) {
-      createWorkspace('My Workspace')
-    }
-  }, [workspaces.length, createWorkspace])
+  // Workspace existence is guaranteed by the SetupWorkspace page on first sign-up
+  // and by preventing deletion of the last workspace — no auto-create needed
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg-app)' }}>

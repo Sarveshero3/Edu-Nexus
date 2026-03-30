@@ -70,7 +70,8 @@ interface WorkspaceState {
   clearAll: () => void
 }
 
-export const MAX_WORKSPACES = 4
+export const MAX_WORKSPACES = 5
+export const MAX_CHATS_PER_WORKSPACE = 5
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
@@ -104,9 +105,15 @@ export const useWorkspace = create<WorkspaceState>()(
       },
 
       deleteWorkspace: (id) => {
+        // Prevent deleting the last workspace
+        if (get().workspaces.length <= 1) {
+          throw new Error('Cannot delete the last workspace. At least one workspace is required.')
+        }
         set((s) => ({
           workspaces: s.workspaces.filter((w) => w.id !== id),
-          activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
+          activeWorkspaceId: s.activeWorkspaceId === id
+            ? s.workspaces.find((w) => w.id !== id)?.id || null
+            : s.activeWorkspaceId,
         }))
       },
 
@@ -159,6 +166,10 @@ export const useWorkspace = create<WorkspaceState>()(
       },
 
       createChatSession: (workspaceId, title) => {
+        const ws = get().workspaces.find((w) => w.id === workspaceId)
+        if (ws && ws.chatSessions.length >= MAX_CHATS_PER_WORKSPACE) {
+          throw new Error(`Maximum of ${MAX_CHATS_PER_WORKSPACE} chat sessions per workspace`)
+        }
         const chatId = generateId()
         const session: ChatSession = {
           id: chatId,

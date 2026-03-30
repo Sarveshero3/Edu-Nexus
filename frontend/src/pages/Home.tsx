@@ -152,7 +152,7 @@ export default function Home() {
 
   return (
     <PageTransition>
-      <div ref={containerRef}>
+      <div ref={containerRef} className="overflow-x-hidden text-3d">
 
         {/* ━━━━━━━━━━ HERO ━━━━━━━━━━ */}
         <motion.section style={{ opacity: heroOpacity, scale: heroScale }}
@@ -170,23 +170,48 @@ export default function Home() {
 
           <div className="relative max-w-5xl mx-auto flex flex-col items-center justify-center text-center z-10 w-full pt-10">
             <Reveal delay={0.05}>
-              <h1 className="text-6xl md:text-7xl lg:text-[6.5rem] font-extrabold tracking-tight leading-[0.95]"
-                style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                <AnimatedGradientText colorFrom="#22d3ee" colorVia="#a78bfa" colorTo="#22d3ee" speed={0.8}>
-                   Edu Nexus
-                </AnimatedGradientText>
-              </h1>
+              <div style={{ perspective: '800px' }}>
+                <motion.h1
+                  className="text-8xl md:text-9xl lg:text-[9rem] font-extrabold tracking-tight leading-[0.95]"
+                  style={{
+                    fontFamily: "'Space Grotesk', sans-serif",
+                    transformStyle: 'preserve-3d',
+                    filter: [
+                      'drop-shadow(0 1px 0 rgba(0,0,0,0.4))',
+                      'drop-shadow(0 2px 0 rgba(0,0,0,0.35))',
+                      'drop-shadow(0 4px 0 rgba(0,0,0,0.3))',
+                      'drop-shadow(0 6px 1px rgba(0,0,0,0.25))',
+                      'drop-shadow(0 8px 2px rgba(0,0,0,0.2))',
+                      'drop-shadow(0 12px 8px rgba(0,0,0,0.15))',
+                      'drop-shadow(0 20px 20px rgba(0,0,0,0.1))',
+                    ].join(' '),
+                  }}
+                  animate={{
+                    rotateX: [2, -1, 2],
+                    rotateY: [-1, 1, -1],
+                  }}
+                  transition={{
+                    duration: 6,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  }}
+                >
+                  <AnimatedGradientText colorFrom="#22d3ee" colorVia="#a78bfa" colorTo="#22d3ee" speed={0.8}>
+                     Edu Nexus
+                  </AnimatedGradientText>
+                </motion.h1>
+              </div>
             </Reveal>
 
             <Reveal delay={0.12}>
-              <p className="text-xl md:text-2xl text-text-primary font-semibold mt-5 tracking-tight"
+              <p className="text-2xl md:text-3xl text-text-primary font-semibold mt-5 tracking-tight"
                 style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 The Intelligent Backbone for Academic Mastery
               </p>
             </Reveal>
 
             <Reveal delay={0.18}>
-              <p className="text-text-secondary text-base md:text-lg max-w-2xl mx-auto mt-4 leading-relaxed">
+              <p className="text-text-secondary text-lg md:text-xl max-w-2xl mx-auto mt-4 leading-relaxed">
                 Upload research papers, query across three AI retrieval engines, and build
                 knowledge graphs — all in one unified workspace.
               </p>
@@ -227,10 +252,10 @@ export default function Home() {
                   transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
                   className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[150%] bg-gradient-to-r from-cyan-500/20 via-purple-500/20 to-cyan-500/20 rounded-[100%] blur-[60px] -z-10 pointer-events-none"
                 />
-                <h2 className="text-4xl md:text-5xl font-bold text-text-primary relative z-10" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                <h2 className="text-5xl md:text-6xl font-bold text-text-primary relative z-10" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                   Tri-Hybrid Intelligence
                 </h2>
-                <p className="text-text-secondary text-lg mt-4 max-w-lg mx-auto relative z-10">
+                <p className="text-text-secondary text-xl mt-4 max-w-lg mx-auto relative z-10">
                   Three specialized retrieval engines working in concert.
                 </p>
               </div>
@@ -248,10 +273,10 @@ export default function Home() {
                           className={`w-14 h-14 rounded-xl ${f.iconBg} border border-white/[0.1] flex items-center justify-center mb-6`}>
                           <f.icon className={f.iconColor} size={26} />
                         </motion.div>
-                        <h3 className="text-xl font-bold text-text-primary mb-3" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        <h3 className="text-2xl font-bold text-text-primary mb-3" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                           {f.title}
                         </h3>
-                        <p className="text-text-secondary text-sm leading-relaxed">{f.desc}</p>
+                        <p className="text-text-secondary text-base leading-relaxed">{f.desc}</p>
                       </motion.div>
                     </MagicCard>
                   </Tilt3D>
@@ -266,10 +291,10 @@ export default function Home() {
           <div className="max-w-6xl mx-auto">
             <Reveal>
               <div className="text-center mb-16">
-                <h2 className="text-4xl md:text-5xl font-bold text-text-primary" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                <h2 className="text-5xl md:text-6xl font-bold text-text-primary" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                   How It Works
                 </h2>
-                <p className="text-text-secondary text-lg mt-4 max-w-md mx-auto">
+                <p className="text-text-secondary text-xl mt-4 max-w-md mx-auto">
                   From upload to insight in four simple steps.
                 </p>
               </div>
@@ -298,10 +323,10 @@ export default function Home() {
                         className={`w-14 h-14 rounded-xl ${step.bg} border border-white/[0.1] flex items-center justify-center mx-auto mb-5`}>
                         <step.icon size={24} className={step.color} />
                       </motion.div>
-                      <h3 className="text-lg font-bold text-text-primary mb-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      <h3 className="text-xl font-bold text-text-primary mb-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                         {step.title}
                       </h3>
-                      <p className="text-text-secondary text-sm leading-relaxed">{step.desc}</p>
+                      <p className="text-text-secondary text-base leading-relaxed">{step.desc}</p>
                     </motion.div>
                   </Tilt3D>
                 </Reveal>
@@ -316,10 +341,10 @@ export default function Home() {
           <div className="relative max-w-6xl mx-auto">
             <Reveal>
               <div className="text-center mb-16">
-                <h2 className="text-4xl md:text-5xl font-bold text-text-primary" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                <h2 className="text-5xl md:text-6xl font-bold text-text-primary" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                   Built for Researchers
                 </h2>
-                <p className="text-text-secondary text-lg mt-4 max-w-md mx-auto">
+                <p className="text-text-secondary text-xl mt-4 max-w-md mx-auto">
                   Every feature designed to accelerate your academic workflow.
                 </p>
               </div>
@@ -352,7 +377,7 @@ export default function Home() {
           <div className="max-w-6xl mx-auto px-6 mb-12">
             <Reveal>
               <div className="text-center">
-                <h2 className="text-4xl md:text-5xl font-bold text-text-primary" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                <h2 className="text-5xl md:text-6xl font-bold text-text-primary" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                   Tech Stack
                 </h2>
               </div>
@@ -387,13 +412,13 @@ export default function Home() {
           <div className="max-w-5xl mx-auto">
             <Reveal>
               <div className="text-center mb-16">
-                <h2 className="text-4xl md:text-5xl font-bold text-text-primary" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                <h2 className="text-5xl md:text-6xl font-bold text-text-primary" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                   Team{' '}
                   <AnimatedGradientText colorFrom="#22d3ee" colorVia="#a78bfa" colorTo="#ec4899" speed={1.2}>
                     PraxisX
                   </AnimatedGradientText>
                 </h2>
-                <p className="text-text-secondary text-lg mt-4 max-w-lg mx-auto">
+                <p className="text-text-secondary text-xl mt-4 max-w-lg mx-auto">
                   Four engineers. One mission. Smarter academic AI.
                 </p>
               </div>
@@ -406,7 +431,7 @@ export default function Home() {
                     <motion.div whileHover={{ y: -8 }} transition={{ type: 'spring', stiffness: 300, damping: 22 }}
                       className="group relative p-6 rounded-2xl border border-white/[0.12] bg-white/[0.08] backdrop-blur-xl text-center cursor-default transition-all duration-300 hover:bg-white/[0.14] hover:border-white/[0.2]">
 
-                      <div className="relative mx-auto w-[104px] h-[104px] mb-5">
+                      <div className="relative mx-auto w-[140px] h-[140px] mb-5">
                         <div className="absolute -inset-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                           style={{
                             background: `conic-gradient(from 0deg, transparent 0%, ${m.accent}40 25%, transparent 50%, ${m.accent}40 75%, transparent 100%)`,
@@ -435,10 +460,10 @@ export default function Home() {
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/30 pointer-events-none" />
           <div className="relative max-w-3xl mx-auto text-center">
             <Reveal>
-              <h2 className="text-4xl md:text-5xl font-bold text-text-primary mb-6" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              <h2 className="text-5xl md:text-6xl font-bold text-text-primary mb-6" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                 Ready to Transform Your Research?
               </h2>
-              <p className="text-text-secondary text-lg mb-10 max-w-xl mx-auto">
+              <p className="text-text-secondary text-xl mb-10 max-w-xl mx-auto">
                 Join students and researchers who use Edu Nexus to study smarter.
               </p>
             </Reveal>

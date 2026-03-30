@@ -106,12 +106,12 @@ export default function Sidebar() {
           <div className="flex items-center gap-3">
             <Sparkles className="text-accent-cyan shrink-0" size={22} />
             {showFull && (
-              <span className="text-white font-bold text-lg tracking-tight">Edu Nexus</span>
+              <span className="text-text-primary font-bold text-lg tracking-tight">Edu Nexus</span>
             )}
           </div>
           <button
             onClick={toggle}
-            className="text-text-muted hover:text-white p-1 rounded-md hover:bg-[rgba(255,255,255,0.06)] transition-colors"
+            className="text-text-muted hover:text-text-primary p-1 rounded-md hover:bg-bg-card transition-colors"
             title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
@@ -123,7 +123,7 @@ export default function Sidebar() {
           <div className="px-3 mb-4" ref={dropdownRef}>
             <button
               onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
-              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)] transition-colors text-sm text-white border border-[rgba(255,255,255,0.06)]"
+              className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-bg-card hover:bg-bg-card-hover transition-colors text-sm text-text-primary border border-border-subtle"
             >
               {activeWs ? (
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: activeWs.color }} />
@@ -140,7 +140,7 @@ export default function Sidebar() {
             </button>
 
             {wsDropdownOpen && (
-              <div className="mt-1 rounded-lg bg-bg-card border border-[rgba(255,255,255,0.08)] shadow-lg overflow-hidden">
+              <div className="mt-1 rounded-lg bg-bg-app border border-border-default shadow-lg overflow-hidden">
                 {workspaces.map((ws) => (
                   <div
                     key={ws.id}
@@ -148,7 +148,7 @@ export default function Sidebar() {
                       'flex items-center justify-between px-3 py-2 text-sm cursor-pointer transition-colors group',
                       ws.id === activeWorkspaceId
                         ? 'bg-accent-cyan/10 text-accent-cyan'
-                        : 'text-text-secondary hover:bg-[rgba(255,255,255,0.04)]'
+                        : 'text-text-secondary hover:bg-bg-card'
                     )}
                   >
                     <span className="flex items-center gap-2 truncate flex-1"
@@ -178,14 +178,14 @@ export default function Sidebar() {
 
                 {/* New workspace input */}
                 {showNewWs ? (
-                  <div className="flex items-center gap-1 px-2 py-2 border-t border-[rgba(255,255,255,0.06)]">
+                  <div className="flex items-center gap-1 px-2 py-2 border-t border-border-subtle">
                     <input
                       autoFocus
                       value={newWsName}
                       onChange={(e) => setNewWsName(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleCreateWorkspace()}
                       placeholder="Name..."
-                      className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-text-muted px-2 py-1 rounded border border-[rgba(255,255,255,0.1)]"
+                      className="flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted px-2 py-1 rounded border border-border-default"
                     />
                     <button onClick={handleCreateWorkspace} className="text-green-400 hover:text-green-300 p-1">
                       <Check size={14} />
@@ -197,7 +197,7 @@ export default function Sidebar() {
                 ) : (
                   <button
                     onClick={() => setShowNewWs(true)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-accent-cyan hover:bg-[rgba(255,255,255,0.04)] border-t border-[rgba(255,255,255,0.06)]"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-accent-cyan hover:bg-bg-card border-t border-border-subtle"
                   >
                     <Plus size={14} />
                     New Workspace
@@ -262,7 +262,7 @@ export default function Sidebar() {
                     'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm cursor-pointer transition-colors group',
                     session.id === activeChatSessionId
                       ? 'bg-accent-cyan/10 text-accent-cyan'
-                      : 'text-text-secondary hover:bg-[rgba(255,255,255,0.04)]'
+                      : 'text-text-secondary hover:bg-bg-card'
                   )}
                   onClick={() => {
                     setActiveChatSession(session.id)
@@ -325,7 +325,7 @@ export default function Sidebar() {
         </nav>
 
         {/* Bottom */}
-        <div className="px-3 pb-4 flex flex-col gap-1 border-t border-[rgba(255,255,255,0.06)] pt-4">
+        <div className="px-3 pb-4 flex flex-col gap-1 border-t border-border-subtle pt-4">
           <NavLink
             to="/settings"
             className={({ isActive }) =>
@@ -341,7 +341,7 @@ export default function Sidebar() {
               cn('sidebar-link', isActive && 'active', collapsed && 'justify-center px-3')
             }
           >
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-cyan to-accent-purple flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-accent-cyan to-accent-purple flex items-center justify-center text-[10px] font-bold text-text-inverse shrink-0">
               {user?.name?.[0]?.toUpperCase() || 'U'}
             </div>
             {showFull && <span>Profile</span>}

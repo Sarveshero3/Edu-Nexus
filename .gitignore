@@ -53,6 +53,8 @@ data/artifacts/*
 # ── Agent context (private) ──
 .agent/
 .agent
+.agents/
+.agents
 
 # ── Frontend ──
 frontend/node_modules/

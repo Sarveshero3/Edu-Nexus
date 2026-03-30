@@ -141,14 +141,14 @@ export default function SignIn() {
 
             {!noAccount && (
               <form onSubmit={handleSubmit(onSubmit)}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 gap-y-4">
                   <div>
                     <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2.5 block">Username</label>
                     <input
                       {...register('username')}
                       defaultValue={existingUser || ''}
                       placeholder="Your username"
-                      className="w-full bg-white/[0.10] border border-white/[0.15] rounded-xl px-4 py-4 text-white text-base font-medium outline-none focus:border-cyan-500/60 focus:bg-white/[0.12] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/40 backdrop-blur-sm"
+                      className="w-full bg-bg-input border border-border-default rounded-xl px-4 py-4 text-white text-base font-medium outline-none focus:border-accent-cyan/60 focus:bg-bg-input-focus focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/50 backdrop-blur-sm"
                     />
                     {errors.username && <p className="text-red-400 text-xs mt-1.5 font-medium">{errors.username.message}</p>}
                   </div>
@@ -158,9 +158,12 @@ export default function SignIn() {
                       {...register('password')}
                       type="password"
                       placeholder="••••••••"
-                      className="w-full bg-white/[0.10] border border-white/[0.15] rounded-xl px-4 py-4 text-white text-base font-medium outline-none focus:border-cyan-500/60 focus:bg-white/[0.12] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/40 backdrop-blur-sm"
+                      className="w-full bg-bg-input border border-border-default rounded-xl px-4 py-4 text-white text-base font-medium outline-none focus:border-accent-cyan/60 focus:bg-bg-input-focus focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/50 backdrop-blur-sm"
                     />
                     {errors.password && <p className="text-red-400 text-xs mt-1 font-medium">{errors.password.message}</p>}
+                    <div className="mt-2 text-right">
+                      <Link to="/forgot-password" className="text-cyan-400 hover:text-cyan-300 text-xs font-bold transition-colors">Forgot your password?</Link>
+                    </div>
                   </div>
                 </div>
 

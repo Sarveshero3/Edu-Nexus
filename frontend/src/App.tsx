@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
+import { applyTheme, useTheme } from '@/stores/themeStore'
 import AuthGuard from '@/components/guards/AuthGuard'
 import AppShell from '@/components/layout/AppShell'
 import PublicLayout from '@/components/layout/PublicLayout'

@@ -19,21 +19,21 @@ export default function Profile() {
 
   return (
     <PageTransition className="p-6 lg:p-8 max-w-3xl">
-      <h1 className="text-2xl font-bold text-white mb-8">Your Profile</h1>
+      <h1 className="text-2xl font-bold text-text-primary mb-8">Your Profile</h1>
 
       <GlassCard hover={false} className="p-6 flex items-center gap-6 mb-8">
-        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-accent-cyan to-accent-purple flex items-center justify-center text-2xl font-bold text-white shrink-0">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-accent-cyan to-accent-purple flex items-center justify-center text-2xl font-bold text-text-inverse shrink-0">
           {user?.name?.[0]?.toUpperCase() || 'U'}
         </div>
         <div>
-          <p className="text-white font-bold text-lg">{user?.name}</p>
+          <p className="text-text-primary font-bold text-lg">{user?.name}</p>
           <p className="text-text-muted text-sm">{user?.email}</p>
           <p className="text-text-muted text-xs mt-1">Member since March 2026</p>
           <button className="text-accent-cyan text-xs mt-2 hover:underline">Change photo</button>
         </div>
       </GlassCard>
 
-      <h2 className="text-white font-semibold text-sm mb-4">Personal Information</h2>
+      <h2 className="text-text-primary font-semibold text-sm mb-4">Personal Information</h2>
       <div className="grid grid-cols-2 gap-4 mb-8">
         <div>
           <label className="text-text-muted text-xs block mb-1.5">Name</label>
@@ -45,7 +45,7 @@ export default function Profile() {
         </div>
       </div>
 
-      <h2 className="text-white font-semibold text-sm mb-4">Academic Information</h2>
+      <h2 className="text-text-primary font-semibold text-sm mb-4">Academic Information</h2>
       <div className="grid grid-cols-2 gap-4 mb-8">
         <div>
           <label className="text-text-muted text-xs block mb-1.5">Institution</label>

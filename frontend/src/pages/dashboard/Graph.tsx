@@ -511,7 +511,7 @@ export default function Graph() {
       {/* ── Floating controls — bottom center ── */}
       <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-[#1e2030]/90 backdrop-blur-md rounded-2xl border border-white/[0.12] px-4 py-2 shadow-2xl">
         {simNodes.length > 0 && (
-          <span className="text-white/50 text-xs font-medium px-2">
+          <span className="text-text-muted text-xs font-medium px-2">
             {simNodes.length} nodes · {rawEdges.length} edges
           </span>
         )}
@@ -520,7 +520,7 @@ export default function Graph() {
         <div className="relative">
           <button
             onClick={() => setShowLayoutMenu(!showLayoutMenu)}
-            className="h-9 px-4 rounded-xl bg-white/[0.08] border border-white/[0.08] flex items-center gap-2 hover:bg-white/[0.14] transition-colors text-white/80 text-xs font-semibold"
+            className="h-9 px-4 rounded-xl bg-bg-card border border-border-default flex items-center gap-2 hover:bg-bg-card-hover transition-colors text-text-secondary text-xs font-semibold"
           >
             <LayoutGrid size={14} />
             {LAYOUTS.find((l) => l.key === layout)?.label}
@@ -539,7 +539,7 @@ export default function Graph() {
                   className={`w-full text-left px-4 py-2.5 text-xs font-medium transition-colors ${
                     layout === l.key
                       ? 'bg-cyan-500/15 text-cyan-400'
-                      : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
+                      : 'text-text-secondary hover:bg-bg-card hover:text-text-primary'
                   }`}
                 >
                   {l.label}
@@ -551,22 +551,22 @@ export default function Graph() {
 
         <button
           onClick={handleFitView}
-          className="w-9 h-9 rounded-xl bg-white/[0.08] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.14] transition-colors"
+          className="w-9 h-9 rounded-xl bg-bg-card border border-border-default flex items-center justify-center hover:bg-bg-card-hover transition-colors"
           title="Fit to view"
         >
-          <Maximize2 size={14} className="text-white/70" />
+          <Maximize2 size={14} className="text-text-secondary" />
         </button>
         <button
           onClick={() => setZoom((z) => Math.min(z + 0.2, 4))}
-          className="w-9 h-9 rounded-xl bg-white/[0.08] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.14] transition-colors"
+          className="w-9 h-9 rounded-xl bg-bg-card border border-border-default flex items-center justify-center hover:bg-bg-card-hover transition-colors"
         >
-          <ZoomIn size={14} className="text-white/70" />
+          <ZoomIn size={14} className="text-text-secondary" />
         </button>
         <button
           onClick={() => setZoom((z) => Math.max(z - 0.2, 0.15))}
-          className="w-9 h-9 rounded-xl bg-white/[0.08] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.14] transition-colors"
+          className="w-9 h-9 rounded-xl bg-bg-card border border-border-default flex items-center justify-center hover:bg-bg-card-hover transition-colors"
         >
-          <ZoomOut size={14} className="text-white/70" />
+          <ZoomOut size={14} className="text-text-secondary" />
         </button>
 
         {/* Frequency filter */}
@@ -576,7 +576,7 @@ export default function Graph() {
             className={`h-9 px-3 rounded-xl border flex items-center gap-2 transition-colors text-xs font-semibold ${
               minFrequency > 1
                 ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400'
-                : 'bg-white/[0.08] border-white/[0.08] text-white/80 hover:bg-white/[0.14]'
+                : 'bg-bg-card border-border-default text-text-secondary hover:bg-bg-card-hover'
             }`}
           >
             <SlidersHorizontal size={14} />
@@ -584,7 +584,7 @@ export default function Graph() {
           </button>
           {showFilters && (
             <div className="absolute bottom-full left-0 mb-2 w-60 rounded-xl bg-[#1e2030] border border-white/[0.12] shadow-2xl p-4 z-50">
-              <label className="text-white/80 text-xs font-bold uppercase tracking-wider mb-2 block">Min Frequency</label>
+              <label className="text-text-secondary text-xs font-bold uppercase tracking-wider mb-2 block">Min Frequency</label>
               <input
                 type="range"
                 min={1}
@@ -596,12 +596,12 @@ export default function Graph() {
                 }}
                 className="w-full accent-cyan-500"
               />
-              <div className="flex justify-between text-white/50 text-xs mt-1">
+              <div className="flex justify-between text-text-muted text-xs mt-1">
                 <span>1 (all)</span>
                 <span className="text-cyan-400 font-semibold">{minFrequency}</span>
                 <span>4</span>
               </div>
-              <p className="text-white/40 text-[10px] mt-2">Hide entities below {minFrequency} occurrence(s).</p>
+              <p className="text-text-muted text-[10px] mt-2">Hide entities below {minFrequency} occurrence(s).</p>
             </div>
           )}
         </div>
@@ -626,9 +626,9 @@ export default function Graph() {
         {nodesError && (
           <div className="absolute inset-0 flex items-center justify-center z-10">
             <div className="text-center">
-              <AlertCircle className="text-white/30 mx-auto mb-4" size={44} />
-              <p className="text-white/50 text-lg font-medium">Knowledge graph unavailable.</p>
-              <p className="text-white/30 text-sm mt-1">Upload documents to build it.</p>
+              <AlertCircle className="text-text-muted mx-auto mb-4" size={44} />
+              <p className="text-text-muted text-lg font-medium">Knowledge graph unavailable.</p>
+              <p className="text-text-muted text-sm mt-1">Upload documents to build it.</p>
             </div>
           </div>
         )}
@@ -636,9 +636,9 @@ export default function Graph() {
         {!isLoading && !nodesError && simNodes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center z-10">
             <div className="text-center">
-              <Share2 className="text-white/30 mx-auto mb-4" size={44} />
-              <p className="text-white/50 text-lg font-medium">No graph data yet.</p>
-              <p className="text-white/30 text-sm mt-1">Upload documents to build the knowledge graph.</p>
+              <Share2 className="text-text-muted mx-auto mb-4" size={44} />
+              <p className="text-text-muted text-lg font-medium">No graph data yet.</p>
+              <p className="text-text-muted text-sm mt-1">Upload documents to build the knowledge graph.</p>
             </div>
           </div>
         )}
@@ -724,8 +724,8 @@ export default function Graph() {
           >
             <GlassCard hover={false} className="h-full p-6 rounded-none rounded-l-2xl border-l border-white/[0.08]">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-white truncate mr-2">{nodeDetail.name}</h3>
-                <button onClick={() => { setSelectedNode(null); setNodeDetail(null) }} className="text-white/40 hover:text-white transition-colors">
+                <h3 className="text-lg font-bold text-text-primary truncate mr-2">{nodeDetail.name}</h3>
+                <button onClick={() => { setSelectedNode(null); setNodeDetail(null) }} className="text-text-muted hover:text-text-primary transition-colors">
                   <X size={18} />
                 </button>
               </div>
@@ -741,7 +741,7 @@ export default function Graph() {
               )}
 
               <div className="mb-6">
-                <h4 className="text-white/40 text-xs font-semibold uppercase tracking-wider mb-3">
+                <h4 className="text-text-muted text-xs font-semibold uppercase tracking-wider mb-3">
                   Connections ({nodeDetail.connections.length})
                 </h4>
                 <div className="flex flex-col gap-2 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
@@ -752,16 +752,16 @@ export default function Graph() {
                         const node = simNodes.find((n) => n.name === conn.connected)
                         if (node) handleNodeClick(node)
                       }}
-                      className="text-left text-sm group p-3 rounded-xl hover:bg-white/[0.06] transition-colors border border-transparent hover:border-white/[0.08]"
+                      className="text-left text-sm group p-3 rounded-xl hover:bg-bg-card transition-colors border border-transparent hover:border-border-default"
                     >
                       <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-accent-cyan/10 text-accent-cyan/80 border border-accent-cyan/20">
                         {conn.relation}
                       </span>
-                      <span className="text-white group-hover:text-cyan-300 font-medium block mt-1.5 text-sm">{conn.connected}</span>
+                      <span className="text-text-primary group-hover:text-cyan-300 font-medium block mt-1.5 text-sm">{conn.connected}</span>
                     </button>
                   ))}
                   {nodeDetail.connections.length === 0 && (
-                    <p className="text-white/30 text-sm">No connections found.</p>
+                    <p className="text-text-muted text-sm">No connections found.</p>
                   )}
                 </div>
               </div>

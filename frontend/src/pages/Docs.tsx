@@ -51,7 +51,7 @@ export default function Docs() {
 
         <div className="flex pt-20">
           {/* Sidebar */}
-          <aside className="hidden md:block w-[260px] h-[calc(100vh-80px)] sticky top-20 bg-bg-sidebar p-4 overflow-y-auto border-r border-[rgba(255,255,255,0.06)]">
+          <aside className="hidden md:block w-[260px] h-[calc(100vh-80px)] sticky top-20 bg-bg-sidebar p-4 overflow-y-auto border-r border-border-subtle">
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
               <input placeholder="Search docs..." className="input-field pl-9 text-sm" />
@@ -62,7 +62,7 @@ export default function Docs() {
                 <div key={sec.title}>
                   <button
                     onClick={() => toggleSection(sec.title)}
-                    className="w-full text-left px-3 py-2 text-sm font-semibold text-text-muted hover:text-white flex items-center gap-2"
+                    className="w-full text-left px-3 py-2 text-sm font-semibold text-text-muted hover:text-text-primary flex items-center gap-2"
                   >
                     <ChevronRight
                       size={14}
@@ -80,7 +80,7 @@ export default function Docs() {
                             'text-left px-3 py-1.5 text-sm rounded-md transition-colors',
                             activeItem === item
                               ? 'text-accent-cyan border-l-2 border-accent-cyan bg-accent-cyan/5'
-                              : 'text-text-muted hover:text-white'
+                              : 'text-text-muted hover:text-text-primary'
                           )}
                         >
                           {item}
@@ -95,11 +95,11 @@ export default function Docs() {
 
           {/* Content */}
           <main className="flex-1 max-w-3xl mx-auto px-8 py-8">
-            <h1 className="text-3xl font-bold text-white mb-2">{activeSection}</h1>
+            <h1 className="text-3xl font-bold text-text-primary mb-2">{activeSection}</h1>
             <p className="text-text-muted text-sm mb-8">Learn how to get the most out of Edu Nexus.</p>
 
             <div className="prose prose-invert max-w-none">
-              <h2 className="text-xl font-bold text-white mb-4">{activeItem}</h2>
+              <h2 className="text-xl font-bold text-text-primary mb-4">{activeItem}</h2>
 
               <p className="text-text-muted leading-relaxed mb-6">
                 Edu Nexus is an academic AI platform powered by a tri-hybrid RAG (Retrieval-Augmented
@@ -109,8 +109,8 @@ export default function Docs() {
               </p>
 
               {/* Code block */}
-              <div className="relative bg-bg-sidebar rounded-[12px] p-4 mb-6 border border-[rgba(255,255,255,0.06)]">
-                <button className="absolute top-3 right-3 text-text-muted hover:text-white">
+              <div className="relative bg-bg-sidebar rounded-[12px] p-4 mb-6 border border-border-subtle">
+                <button className="absolute top-3 right-3 text-text-muted hover:text-text-primary">
                   <Copy size={14} />
                 </button>
                 <pre className="text-sm font-mono text-accent-cyan overflow-x-auto">
@@ -121,7 +121,7 @@ edu-nexus init --project my-research`}
 
               {/* Tip callout */}
               <div className="border-l-4 border-accent-cyan bg-accent-cyan/5 rounded-r-[12px] p-4 mb-6">
-                <p className="text-sm text-white">
+                <p className="text-sm text-text-primary">
                   <strong>💡 Tip:</strong> Use the tri-hybrid mode for best results across all document types.
                   The engine automatically weights each retrieval method based on your query type.
                 </p>
@@ -129,7 +129,7 @@ edu-nexus init --project my-research`}
 
               {/* Warning callout */}
               <div className="border-l-4 border-amber-500 bg-amber-500/5 rounded-r-[12px] p-4 mb-6">
-                <p className="text-sm text-white">
+                <p className="text-sm text-text-primary">
                   <strong>⚠️ Warning:</strong> Neo4j requires a running instance for graph features.
                   Make sure to configure the connection string in your environment variables.
                 </p>

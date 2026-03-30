@@ -110,7 +110,7 @@ export default function Chat() {
       <PageTransition className="h-[calc(100vh)] flex items-center justify-center">
         <div className="text-center">
           <Sparkles className="text-accent-cyan mx-auto mb-4" size={40} />
-          <h2 className="text-xl text-white font-semibold mb-2">Select a Workspace</h2>
+          <h2 className="text-xl text-text-primary font-semibold mb-2">Select a Workspace</h2>
           <p className="text-text-muted text-sm">
             Create or select a workspace from the sidebar to start chatting
           </p>
@@ -129,9 +129,9 @@ export default function Chat() {
   return (
     <PageTransition className="h-[calc(100vh)] flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-[rgba(255,255,255,0.06)]">
+      <div className="flex items-center justify-between px-6 py-3 border-b border-border-subtle">
         <div>
-          <h1 className="text-lg font-bold text-white">{session?.title || 'Chat'}</h1>
+          <h1 className="text-lg font-bold text-text-primary">{session?.title || 'Chat'}</h1>
         </div>
         <div className="flex items-center gap-4">
           {/* Engine status indicators */}
@@ -156,10 +156,10 @@ export default function Chat() {
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center flex-1 gap-6">
             <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-cyan/20 to-accent-purple/20 flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border border-[rgba(255,255,255,0.08)]">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-cyan/20 to-accent-purple/20 flex items-center justify-center mx-auto mb-4 backdrop-blur-sm border border-border-default">
                 <Sparkles className="text-accent-cyan" size={28} />
               </div>
-              <h2 className="text-xl text-white font-semibold mb-2">How can I help?</h2>
+              <h2 className="text-xl text-text-primary font-semibold mb-2">How can I help?</h2>
               <p className="text-text-muted text-sm max-w-md">
                 Ask questions about your uploaded documents. I'll search through BM25, Qdrant, and the Knowledge Graph to find the best answers.
               </p>
@@ -175,7 +175,7 @@ export default function Chat() {
                   <button
                     key={i}
                     onClick={() => sendMessage(q)}
-                    className="text-left px-4 py-3 rounded-xl text-sm text-white/80 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] hover:border-accent-cyan/30 hover:bg-[rgba(255,255,255,0.06)] transition-all"
+                    className="text-left px-4 py-3 rounded-xl text-sm text-text-secondary bg-bg-card border border-border-subtle hover:border-accent-cyan/30 hover:bg-bg-card-hover transition-all"
                   >
                     {q}
                   </button>
@@ -199,7 +199,7 @@ export default function Chat() {
             )}
             <div className="max-w-2xl">
               {msg.role === 'user' ? (
-                <div className="bg-gradient-to-br from-accent-cyan to-accent-purple text-white px-5 py-3 rounded-[16px] rounded-br-[4px] text-sm">
+                <div className="bg-gradient-to-br from-accent-cyan to-accent-purple text-text-inverse px-5 py-3 rounded-[16px] rounded-br-[4px] text-sm">
                   {msg.content}
                 </div>
               ) : (
@@ -246,7 +246,7 @@ export default function Chat() {
                             <div key={i} className="flex items-start gap-2">
                               <span className="text-green-400 text-[10px] mt-0.5">✓</span>
                               <div>
-                                <span className="text-white/80 text-[11px] font-medium">{step.step}</span>
+                                <span className="text-text-secondary text-[11px] font-medium">{step.step}</span>
                                 <span className="text-text-muted text-[11px] ml-1.5">{step.detail}</span>
                               </div>
                             </div>
@@ -284,7 +284,7 @@ export default function Chat() {
       </div>
 
       {/* Input */}
-      <div className="px-6 pb-3 pt-2 border-t border-[rgba(255,255,255,0.06)]">
+      <div className="px-6 pb-3 pt-2 border-t border-border-subtle">
         <div className="flex items-end gap-3">
           <textarea
             value={input}

@@ -88,7 +88,7 @@ export default function Onboarding() {
             onClick={() => { setDirection(i > step ? 1 : -1); setStep(i) }}
             className={cn(
               'h-2 rounded-full transition-all duration-500 cursor-pointer',
-              step === i ? 'w-10 bg-gradient-to-r ' + colors.from + ' ' + colors.to : 'w-2 bg-white/15 hover:bg-white/25'
+              step === i ? 'w-10 bg-gradient-to-r ' + colors.from + ' ' + colors.to : 'w-2 bg-border-default hover:bg-border-strong'
             )}
           />
         ))}
@@ -104,7 +104,7 @@ export default function Onboarding() {
             transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           >
             {/* Main card */}
-            <div className="relative rounded-3xl border border-white/[0.10] bg-white/[0.04] backdrop-blur-xl p-12 overflow-hidden">
+            <div className="relative rounded-3xl border border-border-default bg-bg-card backdrop-blur-xl p-12 overflow-hidden">
               {/* Animated background glow */}
               <motion.div
                 className="absolute inset-0 opacity-30 pointer-events-none"
@@ -127,15 +127,15 @@ export default function Onboarding() {
                     transition={{ duration: 2, repeat: Infinity }}
                   />
                   <div className={`relative w-20 h-20 rounded-2xl bg-gradient-to-br ${colors.from} ${colors.to} flex items-center justify-center shadow-xl ${colors.glow}`}>
-                    {step === 0 && <Upload className="text-white" size={36} />}
-                    {step === 1 && <Brain className="text-white" size={36} />}
-                    {step === 2 && <Sparkles className="text-white" size={36} />}
+                    {step === 0 && <Upload className="text-text-inverse" size={36} />}
+                    {step === 1 && <Brain className="text-text-inverse" size={36} />}
+                    {step === 2 && <Sparkles className="text-text-inverse" size={36} />}
                   </div>
                 </div>
 
                 {/* Title with animated gradient */}
                 <h2
-                  className="text-3xl font-extrabold text-white mb-3"
+                  className="text-3xl font-extrabold text-text-primary mb-3"
                   style={{
                     fontFamily: "'Space Grotesk', sans-serif",
                     textShadow: '0 4px 24px rgba(0,0,0,0.5)',
@@ -151,7 +151,7 @@ export default function Onboarding() {
                     {current.title}
                   </AnimatedGradientText>
                 </h2>
-                <p className="text-white/70 text-base mb-10 max-w-lg leading-relaxed">{current.desc}</p>
+                <p className="text-text-secondary text-base mb-10 max-w-lg leading-relaxed">{current.desc}</p>
 
                 {/* Animated items — staggered cards */}
                 <div className="grid grid-cols-3 gap-4 w-full max-w-lg">
@@ -161,16 +161,16 @@ export default function Onboarding() {
                       initial={{ opacity: 0, y: 20, scale: 0.9 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       transition={{ delay: 0.3 + i * 0.12, duration: 0.5, ease: 'easeOut' }}
-                      className="flex flex-col items-center p-4 rounded-2xl border border-white/[0.08] bg-white/[0.04] gap-2 hover:bg-white/[0.08] transition-colors"
+                      className="flex flex-col items-center p-4 rounded-2xl border border-border-default bg-bg-card gap-2 hover:bg-bg-card-hover transition-colors"
                     >
                       <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${colors.from}/20 ${colors.to}/20 flex items-center justify-center`}>
                         <item.icon className={colors.accent} size={20} />
                       </div>
-                      <span className="text-white/90 text-xs font-semibold text-center leading-tight">{item.label}</span>
-                      <span className="text-white/40 text-[10px] font-medium">{item.size}</span>
+                      <span className="text-text-secondary text-xs font-semibold text-center leading-tight">{item.label}</span>
+                      <span className="text-text-muted text-[10px] font-medium">{item.size}</span>
 
                       {/* Mini progress animation */}
-                      <div className="w-full h-1 rounded-full bg-white/[0.06] overflow-hidden mt-1">
+                      <div className="w-full h-1 rounded-full bg-border-subtle overflow-hidden mt-1">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: '100%' }}
@@ -189,7 +189,7 @@ export default function Onboarding() {
               <button
                 onClick={prev}
                 className={cn(
-                  'text-white/50 text-sm font-medium hover:text-white transition-colors',
+                  'text-text-muted text-sm font-medium hover:text-text-primary transition-colors',
                   step === 0 && 'invisible'
                 )}
               >
@@ -199,7 +199,7 @@ export default function Onboarding() {
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => navigate('/dashboard/sources')}
-                  className="text-white/40 text-sm hover:text-white/70 transition-colors"
+                  className="text-text-muted text-sm hover:text-text-secondary transition-colors"
                 >
                   Skip
                 </button>

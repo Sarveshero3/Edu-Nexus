@@ -335,7 +335,7 @@ export default function Sources() {
             >
               <div className="flex items-center gap-3 mb-2">
                 <Loader2 className="text-cyan-400 animate-spin" size={16} />
-                <span className="text-white text-sm font-semibold">Processing documents...</span>
+                <span className="text-text-primary text-sm font-semibold">Processing documents...</span>
                 <span className="text-cyan-400 text-xs font-mono ml-auto">
                   {Math.floor(uploadElapsed / 60)}:{String(uploadElapsed % 60).padStart(2, '0')}
                 </span>
@@ -344,7 +344,7 @@ export default function Sources() {
                 <span>{uploadJobs.filter(j => j.status === 'done').length}/{uploadJobs.length} files done</span>
                 <span className="text-cyan-400/50">• Click to view details</span>
               </div>
-              <div className="w-full h-1 bg-white/5 rounded-full mt-2 overflow-hidden">
+              <div className="w-full h-1 bg-border-subtle rounded-full mt-2 overflow-hidden">
                 <motion.div
                   className="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-full"
                   animate={{ width: `${uploadJobs.length > 0 ? (uploadJobs.filter(j => j.status === 'done').length / uploadJobs.length) * 100 : 0}%` }}
@@ -369,7 +369,7 @@ export default function Sources() {
                 <Shield className="text-amber-400" size={16} />
                 <span className="text-amber-400 text-sm font-medium">Rate limit active — please wait</span>
               </div>
-              <div className="w-full h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-border-subtle rounded-full overflow-hidden">
                 <motion.div
                   className="h-full bg-gradient-to-r from-amber-500 to-green-400 rounded-full"
                   initial={{ width: '0%' }}
@@ -396,7 +396,7 @@ export default function Sources() {
                 <FolderPlus className="text-accent-cyan" size={24} />
               </div>
               <div className="flex-1">
-                <h3 className="text-white font-semibold text-lg">Create a workspace first</h3>
+                <h3 className="text-text-primary font-semibold text-lg">Create a workspace first</h3>
                 <p className="text-text-muted text-sm mt-1">
                   Workspaces isolate your documents and chat sessions. Create one to start uploading.
                 </p>
@@ -415,10 +415,10 @@ export default function Sources() {
                       onChange={(e) => setNewWsName(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleQuickCreateWorkspace()}
                       placeholder="Workspace name..."
-                      className="bg-[rgba(255,255,255,0.06)] text-white text-sm rounded-lg px-3 py-2 outline-none border border-[rgba(255,255,255,0.1)] focus:border-accent-cyan/50 w-48"
+                      className="bg-bg-card text-text-primary text-sm rounded-lg px-3 py-2 outline-none border border-border-default focus:border-accent-cyan/50 w-48"
                     />
                     <PillButton onClick={handleQuickCreateWorkspace}>Create</PillButton>
-                    <button onClick={() => setShowCreateWs(false)} className="text-text-muted hover:text-white">
+                    <button onClick={() => setShowCreateWs(false)} className="text-text-muted hover:text-text-primary">
                       <X size={16} />
                     </button>
                   </div>
@@ -438,14 +438,14 @@ export default function Sources() {
       {/* Top bar */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Source Documents</h1>
+          <h1 className="text-2xl font-bold text-text-primary">Source Documents</h1>
           {activeWs && (
             <div>
               <p className="text-text-muted text-sm mt-1">
                 Workspace: <span className="text-accent-cyan">{activeWs.name}</span> · {workspaceSources.length}/{MAX_DOCS_PER_WORKSPACE} documents
               </p>
               {/* Document count progress bar */}
-              <div className="w-48 h-1 bg-[rgba(255,255,255,0.06)] rounded-full mt-1.5 overflow-hidden">
+              <div className="w-48 h-1 bg-border-subtle rounded-full mt-1.5 overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-300"
                   style={{
@@ -481,7 +481,7 @@ export default function Sources() {
           {noWorkspace ? (
             <button
               disabled
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-[rgba(255,255,255,0.04)] text-text-muted border border-[rgba(255,255,255,0.06)] cursor-not-allowed opacity-60"
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-bg-card text-text-muted border border-border-subtle cursor-not-allowed opacity-60"
               title="Create a workspace first"
             >
               <Plus size={16} /> Upload
@@ -496,12 +496,12 @@ export default function Sources() {
 
       {/* Limits info bar — shown when workspace active */}
       {activeWs && (
-        <div className="flex items-center gap-4 mb-4 px-4 py-2.5 rounded-xl bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.05)]">
+        <div className="flex items-center gap-4 mb-4 px-4 py-2.5 rounded-xl bg-bg-card border border-border-subtle">
           <Info size={14} className="text-text-muted shrink-0" />
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-text-muted">
-            <span>📄 <strong className="text-white">{workspaceSources.length}</strong>/{MAX_DOCS_PER_WORKSPACE} docs</span>
-            <span>📦 Max <strong className="text-white">{MAX_FILE_SIZE_MB}MB</strong> per file</span>
-            <span>⏱️ <strong className="text-white">{RATE_LIMIT_UPLOADS}</strong> uploads/min</span>
+            <span>📄 <strong className="text-text-primary">{workspaceSources.length}</strong>/{MAX_DOCS_PER_WORKSPACE} docs</span>
+            <span>📦 Max <strong className="text-text-primary">{MAX_FILE_SIZE_MB}MB</strong> per file</span>
+            <span>⏱️ <strong className="text-text-primary">{RATE_LIMIT_UPLOADS}</strong> uploads/min</span>
             <span>📎 PDF, DOCX, TXT, PPTX, XLSX, CSV, MD</span>
           </div>
         </div>
@@ -510,7 +510,7 @@ export default function Sources() {
       {/* Add existing sources dropdown */}
       {showAddExisting && (
         <GlassCard hover={false} className="p-4 mb-6">
-          <h3 className="text-white text-sm font-semibold mb-3">Add existing documents to workspace</h3>
+          <h3 className="text-text-primary text-sm font-semibold mb-3">Add existing documents to workspace</h3>
           <div className="flex flex-wrap gap-2">
             {availableSources.map((s: Source) => (
               <button
@@ -518,7 +518,7 @@ export default function Sources() {
                 onClick={() => {
                   if (activeWorkspaceId) addSourceToWorkspace(activeWorkspaceId, s.name)
                 }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[rgba(255,255,255,0.04)] hover:bg-accent-cyan/10 border border-[rgba(255,255,255,0.08)] hover:border-accent-cyan/30 text-sm text-white transition-all"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-card hover:bg-accent-cyan/10 border border-border-default hover:border-accent-cyan/30 text-sm text-text-primary transition-all"
               >
                 <FileText className={typeColors[s.type] || 'text-gray-400'} size={14} />
                 {s.name}
@@ -562,7 +562,7 @@ export default function Sources() {
                 <div className="flex items-start gap-3">
                   <FileText className={typeColors[doc.type] || 'text-gray-400'} size={24} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-white font-medium text-sm truncate">{doc.name}</p>
+                    <p className="text-text-primary font-medium text-sm truncate">{doc.name}</p>
                     <p className="text-text-muted text-xs mt-1">Type: {doc.type.toUpperCase()}</p>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -597,7 +597,7 @@ export default function Sources() {
           {/* Upload card — only when workspace active */}
           {!noWorkspace && workspaceSources.length < MAX_DOCS_PER_WORKSPACE && (
             <GlassCard
-              className="p-5 border-2 border-dashed border-[rgba(255,255,255,0.15)] flex flex-col items-center justify-center min-h-[120px] cursor-pointer"
+              className="p-5 border-2 border-dashed border-border-strong flex flex-col items-center justify-center min-h-[120px] cursor-pointer"
               onClick={() => !isRateLimited && setShowUpload(true)}
             >
               <Plus className="text-text-muted mb-2" size={24} />
@@ -649,16 +649,16 @@ export default function Sources() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold text-white">Upload Sources</h2>
-                <button onClick={closeUploadPanel} className="text-text-muted hover:text-white">
+                <h2 className="text-lg font-bold text-text-primary">Upload Sources</h2>
+                <button onClick={closeUploadPanel} className="text-text-muted hover:text-text-primary">
                   <X size={20} />
                 </button>
               </div>
 
               {/* Workspace context */}
               {activeWs && (
-                <div className="px-4 py-2.5 rounded-lg bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)] mb-4">
-                  <p className="text-white text-xs font-medium">
+                <div className="px-4 py-2.5 rounded-lg bg-bg-card border border-border-default mb-4">
+                  <p className="text-text-primary text-xs font-medium">
                     <span className="w-2 h-2 rounded-full inline-block mr-2" style={{ backgroundColor: activeWs.color }} />
                     {activeWs.name}
                   </p>
@@ -675,7 +675,7 @@ export default function Sources() {
                     <Shield className="text-amber-400" size={14} />
                     <span className="text-amber-400 text-xs font-medium">Rate limited — please wait</span>
                   </div>
-                  <div className="w-full h-1.5 bg-[rgba(255,255,255,0.06)] rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-border-subtle rounded-full overflow-hidden">
                     <motion.div
                       className="h-full bg-gradient-to-r from-amber-500 to-green-400 rounded-full"
                       initial={{ width: '0%' }}
@@ -701,7 +701,7 @@ export default function Sources() {
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={isRateLimited ? undefined : handleDrop}
-                className={`border-2 border-dashed rounded-[16px] p-8 flex flex-col items-center ${isRateLimited ? 'border-[rgba(255,255,255,0.08)] opacity-50 cursor-not-allowed' : 'border-[rgba(255,255,255,0.2)] cursor-pointer'}`}
+                className={`border-2 border-dashed rounded-[16px] p-8 flex flex-col items-center ${isRateLimited ? 'border-border-default opacity-50 cursor-not-allowed' : 'border-border-strong cursor-pointer'}`}
                 onClick={() => {
                   if (isRateLimited) return
                   const input = document.createElement('input')
@@ -713,7 +713,7 @@ export default function Sources() {
                 }}
               >
                 <Upload className="text-accent-cyan mb-4" size={40} />
-                <p className="text-white font-medium">Drop files here or click to browse</p>
+                <p className="text-text-primary font-medium">Drop files here or click to browse</p>
                 <p className="text-text-muted text-sm mt-1">Select multiple files at once</p>
                 <p className="text-text-muted text-xs mt-1">PDF, DOCX, TXT, PPTX, XLSX, CSV, MD</p>
               </div>
@@ -722,13 +722,13 @@ export default function Sources() {
               {uploadJobs.length > 0 && (
                 <div className="mt-6 flex flex-col gap-2">
                   {uploadJobs.map((job, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3 rounded-[12px] bg-[rgba(255,255,255,0.04)]">
+                    <div key={i} className="flex items-center gap-3 p-3 rounded-[12px] bg-bg-card">
                       {job.status === 'pending' && <div className="w-4 h-4 rounded-full bg-text-muted/30 shrink-0" />}
                       {job.status === 'uploading' && <Loader2 className="text-accent-cyan animate-spin shrink-0" size={16} />}
                       {job.status === 'done' && <CheckCircle className="text-green-400 shrink-0" size={16} />}
                       {job.status === 'error' && <AlertCircle className="text-red-400 shrink-0" size={16} />}
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm truncate ${job.status === 'error' ? 'text-red-400' : 'text-white'}`}>{job.file.name}</p>
+                        <p className={`text-sm truncate ${job.status === 'error' ? 'text-red-400' : 'text-text-primary'}`}>{job.file.name}</p>
                         {job.message && <p className="text-text-muted text-xs mt-0.5">{job.message}</p>}
                       </div>
                     </div>

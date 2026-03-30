@@ -71,7 +71,7 @@ export default function SearchPage() {
       {query && (
         <p className="text-text-muted text-sm mb-6">
           {isLoading ? 'Searching...' : `${hits.length} results for '`}
-          <span className="text-white">{query}</span>
+          <span className="text-text-primary">{query}</span>
           {isLoading ? '' : "'"}
         </p>
       )}
@@ -86,7 +86,7 @@ export default function SearchPage() {
               'px-4 py-2 rounded-full text-sm font-medium transition-colors',
               activeFilter === f
                 ? 'bg-accent-cyan/20 text-accent-cyan'
-                : 'text-text-muted hover:text-white hover:bg-[rgba(255,255,255,0.04)]'
+                : 'text-text-muted hover:text-text-primary hover:bg-bg-card'
             )}
           >
             {f}
@@ -134,7 +134,7 @@ export default function SearchPage() {
                       <span className="text-text-muted text-xs">Rank #{r.rank}</span>
                       {r.score !== null && (
                         <>
-                          <div className="h-1.5 flex-1 max-w-[120px] bg-[rgba(255,255,255,0.08)] rounded-full overflow-hidden">
+                          <div className="h-1.5 flex-1 max-w-[120px] bg-bg-card rounded-full overflow-hidden">
                             <div
                               className="h-full bg-accent-cyan rounded-full"
                               style={{ width: `${Math.min(100, (1 - r.score) * 100)}%` }}

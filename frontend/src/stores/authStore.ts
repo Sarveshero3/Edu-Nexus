@@ -78,7 +78,6 @@ export const useAuth = create<AuthState>()(
           // If backend is down, still clear local state
         }
         localStorage.removeItem('edu-nexus-session-token')
-        useWorkspace.getState().clearAll()
         set({ user: null, token: null })
       },
 

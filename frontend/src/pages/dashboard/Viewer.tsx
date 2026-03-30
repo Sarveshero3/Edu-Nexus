@@ -124,10 +124,10 @@ export default function Viewer() {
   return (
     <PageTransition className="h-[calc(100vh)] flex flex-col">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2 px-6 py-3 border-b border-[rgba(255,255,255,0.06)] text-sm">
-        <Link to="/dashboard/sources" className="text-text-muted hover:text-white">Sources</Link>
+      <div className="flex items-center gap-2 px-6 py-3 border-b border-border-subtle text-sm">
+        <Link to="/dashboard/sources" className="text-text-muted hover:text-text-primary">Sources</Link>
         <ChevronRight size={14} className="text-text-muted" />
-        <span className="text-white truncate">{docName || 'Document'}</span>
+        <span className="text-text-primary truncate">{docName || 'Document'}</span>
         <span className="ml-auto text-text-muted text-xs">{ext.toUpperCase()}</span>
       </div>
 
@@ -135,7 +135,7 @@ export default function Viewer() {
       {selectedText && (
         <div className="mx-6 mt-2 flex items-center gap-3 px-4 py-2 rounded-lg bg-accent-cyan/10 border border-accent-cyan/20">
           <MessageSquareText size={14} className="text-accent-cyan shrink-0" />
-          <p className="text-white text-xs flex-1 truncate">"{selectedText.slice(0, 80)}..."</p>
+          <p className="text-text-primary text-xs flex-1 truncate">"{selectedText.slice(0, 80)}..."</p>
           <button
             onClick={handleAskAboutSelection}
             className="text-accent-cyan text-xs font-semibold hover:underline shrink-0"
@@ -196,7 +196,7 @@ export default function Viewer() {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-accent-cyan text-[11px] font-semibold">Chunk {page * CHUNKS_PER_PAGE + i + 1}</span>
                       </div>
-                      <p className="text-white/90 text-sm leading-relaxed whitespace-pre-line">{chunk.text}</p>
+                      <p className="text-text-secondary text-sm leading-relaxed whitespace-pre-line">{chunk.text}</p>
                     </GlassCard>
                   ))}
                 </div>
@@ -235,11 +235,11 @@ export default function Viewer() {
 
         {/* Right: Chat */}
         <div
-          className="hidden lg:flex flex-col border-l border-[rgba(255,255,255,0.06)]"
+          className="hidden lg:flex flex-col border-l border-border-subtle"
           style={{ width: `${chatWidthPct}%` }}
         >
-          <div className="px-5 py-4 border-b border-[rgba(255,255,255,0.06)]">
-            <h3 className="text-white font-bold text-sm">Ask about this document</h3>
+          <div className="px-5 py-4 border-b border-border-subtle">
+            <h3 className="text-text-primary font-bold text-sm">Ask about this document</h3>
             <p className="text-text-muted text-[11px] italic mt-1">{docName}</p>
           </div>
 
@@ -252,7 +252,7 @@ export default function Viewer() {
                   </div>
                 )}
                 {msg.role === 'user' ? (
-                  <div className="bg-gradient-to-br from-accent-cyan to-accent-purple text-white px-4 py-2.5 rounded-[12px] rounded-br-[4px] text-xs max-w-[80%]">
+                  <div className="bg-gradient-to-br from-accent-cyan to-accent-purple text-text-inverse px-4 py-2.5 rounded-[12px] rounded-br-[4px] text-xs max-w-[80%]">
                     {msg.text}
                   </div>
                 ) : (
@@ -279,7 +279,7 @@ export default function Viewer() {
             <div ref={chatEndRef} />
           </div>
 
-          <div className="px-5 pb-4 pt-2 border-t border-[rgba(255,255,255,0.06)]">
+          <div className="px-5 pb-4 pt-2 border-t border-border-subtle">
             <div className="flex items-end gap-2">
               <input
                 value={chatInput}

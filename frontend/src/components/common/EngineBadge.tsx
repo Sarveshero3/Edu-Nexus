@@ -13,8 +13,8 @@ const config: Record<string, { label: string; className: string }> = {
   faiss: { label: 'Qdrant', className: 'badge-purple' },  // legacy compat
   graph: { label: 'NetworkX', className: 'badge-violet' },
   neo4j: { label: 'NetworkX', className: 'badge-violet' },   // legacy compat
-  hybrid: { label: 'Hybrid', className: 'bg-gradient-to-r from-[#5BC8F5]/20 to-[#A78BFA]/20 text-white border border-[rgba(255,255,255,0.1)] px-2.5 py-0.5 rounded-full text-[11px] font-semibold' },
-  none: { label: 'None', className: 'bg-[rgba(255,255,255,0.06)] text-text-muted px-2.5 py-0.5 rounded-full text-[11px] font-semibold' },
+  hybrid: { label: 'Hybrid', className: 'bg-gradient-to-r from-accent-cyan/20 to-accent-purple/20 text-text-primary border border-border-default px-2.5 py-0.5 rounded-full text-[11px] font-semibold' },
+  none: { label: 'None', className: 'bg-bg-card text-text-muted px-2.5 py-0.5 rounded-full text-[11px] font-semibold' },
 }
 
 export default function EngineBadge({ engine, className }: EngineBadgeProps) {

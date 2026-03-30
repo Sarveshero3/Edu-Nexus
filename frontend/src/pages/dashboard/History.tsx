@@ -94,7 +94,7 @@ export default function History() {
   return (
     <PageTransition className="p-6 lg:p-8">
       <div className="flex items-center gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-white">Query History</h1>
+        <h1 className="text-2xl font-bold text-text-primary">Query History</h1>
         <span className="text-text-muted text-xs">· {ws.name}</span>
       </div>
 
@@ -108,7 +108,7 @@ export default function History() {
               'px-4 py-2 rounded-full text-sm font-medium transition-colors',
               activeTab === tab
                 ? 'bg-accent-cyan/20 text-accent-cyan'
-                : 'text-text-muted hover:text-white hover:bg-[rgba(255,255,255,0.04)]'
+                : 'text-text-muted hover:text-text-primary hover:bg-bg-card'
             )}
           >
             {tab}
@@ -133,7 +133,7 @@ export default function History() {
               onClick={() => setExpandedId(expandedId === q.id ? null : q.id)}
             >
               <div className="flex-1 min-w-0 mr-4">
-                <p className="text-white text-sm font-medium truncate">{q.query}</p>
+                <p className="text-text-primary text-sm font-medium truncate">{q.query}</p>
                 <div className="flex items-center gap-3 mt-2">
                   <EngineBadge engine={q.engine_used} />
                   <span className="text-text-muted text-xs">{timeAgo(q.timestamp)}</span>
@@ -157,7 +157,7 @@ export default function History() {
                   transition={{ duration: 0.2 }}
                   className="overflow-hidden"
                 >
-                  <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,0.06)]">
+                  <div className="mt-4 pt-4 border-t border-border-subtle">
                     <p className="text-text-muted text-sm leading-relaxed whitespace-pre-line">{q.answer}</p>
                     <button
                       onClick={() => {

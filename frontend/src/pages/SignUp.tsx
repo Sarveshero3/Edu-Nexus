@@ -20,7 +20,7 @@ const schema = z.object({
 })
 type FormData = z.infer<typeof schema>
 
-const inputClass = "w-full bg-white/[0.10] border border-white/[0.15] rounded-xl px-4 py-3.5 text-white text-base font-medium outline-none focus:border-cyan-500/60 focus:bg-white/[0.12] focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/40 backdrop-blur-sm"
+const inputClass = "w-full bg-bg-input border border-border-default rounded-xl px-4 py-3.5 text-white text-base font-medium outline-none focus:border-accent-cyan/60 focus:bg-bg-input-focus focus:shadow-[0_0_0_3px_rgba(34,211,238,0.12)] transition-all placeholder:text-white/50 backdrop-blur-sm"
 
 export default function SignUp() {
   const navigate = useNavigate()
@@ -154,7 +154,7 @@ export default function SignUp() {
                     <div className="flex items-center gap-3 mt-4">
                       <Link
                         to="/sign-in"
-                        className="px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm font-semibold hover:bg-white/20 transition-colors"
+                        className="px-4 py-2 rounded-lg bg-bg-card border border-border-default text-white text-sm font-semibold hover:bg-bg-card-hover transition-colors"
                       >
                         Sign In Instead
                       </Link>

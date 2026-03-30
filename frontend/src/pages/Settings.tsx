@@ -42,10 +42,10 @@ export default function Settings() {
 
   return (
     <PageTransition className="p-6 lg:p-8 max-w-3xl">
-      <h1 className="text-2xl font-bold text-white mb-8">Settings</h1>
+      <h1 className="text-2xl font-bold text-text-primary mb-8">Settings</h1>
 
       {/* AI Engine info */}
-      <div className="p-4 rounded-[12px] bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.06)] mb-8">
+      <div className="p-4 rounded-[12px] bg-bg-card border border-border-subtle mb-8">
         <p className="text-text-muted text-sm">
           <span className="text-accent-cyan font-semibold">AI Engine:</span> The orchestrator automatically selects the optimal retrieval strategy (BM25, Qdrant, NetworkX, or hybrid) for each query. No manual configuration needed.
         </p>
@@ -53,7 +53,7 @@ export default function Settings() {
 
       {/* Appearance */}
       <div className="mb-8">
-        <h2 className="text-white text-sm font-semibold mb-4 uppercase tracking-wider">Appearance</h2>
+        <h2 className="text-text-primary text-sm font-semibold mb-4 uppercase tracking-wider">Appearance</h2>
         <div className="flex flex-col gap-6">
           <div>
             <label className="text-text-muted text-xs block mb-3">Theme</label>
@@ -61,7 +61,7 @@ export default function Settings() {
               {themes.map((t) => (
                 <button key={t} onClick={() => setTheme(t.toLowerCase() as any)}
                   className={cn('px-5 py-2 rounded-full text-sm font-medium transition-colors',
-                    theme === t.toLowerCase() ? 'bg-accent-cyan/20 text-accent-cyan' : 'text-text-muted border border-[rgba(255,255,255,0.1)] hover:text-white'
+                    theme === t.toLowerCase() ? 'bg-accent-cyan/20 text-accent-cyan' : 'text-text-muted border border-border-default hover:text-text-primary'
                   )}>{t}</button>
               ))}
             </div>
@@ -82,11 +82,11 @@ export default function Settings() {
 
       {/* Account */}
       <div className="mb-8">
-        <h2 className="text-white text-sm font-semibold mb-4 uppercase tracking-wider">Account</h2>
+        <h2 className="text-text-primary text-sm font-semibold mb-4 uppercase tracking-wider">Account</h2>
         <div className="flex flex-col gap-4">
           <div>
             <label className="text-text-muted text-xs block mb-1.5">Username</label>
-            <p className="text-white text-sm font-medium">{user?.name || 'Unknown'}</p>
+            <p className="text-text-primary text-sm font-medium">{user?.name || 'Unknown'}</p>
           </div>
           <div className="p-4 rounded-[12px] bg-red-500/5 border border-red-500/20">
             <h3 className="text-red-400 font-semibold text-sm mb-2">Danger Zone</h3>
@@ -109,7 +109,7 @@ export default function Settings() {
               {confirmDelete && !deleting && (
                 <button
                   onClick={() => setConfirmDelete(false)}
-                  className="px-4 py-2 text-text-muted text-sm hover:text-white"
+                  className="px-4 py-2 text-text-muted text-sm hover:text-text-primary"
                 >
                   Cancel
                 </button>

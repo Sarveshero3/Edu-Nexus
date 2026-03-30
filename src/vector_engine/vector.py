@@ -5,10 +5,7 @@ Embedding generation using sentence-transformers.
 FAISS/LangChain dependencies removed — Qdrant is now the vector backend.
 """
 
-from __future__ import annotations
-
 import logging
-from typing import List
 
 import numpy as np
 
@@ -29,7 +26,7 @@ def _get_model():
     return _model
 
 
-def embed_chunks(texts: List[str]) -> List[List[float]]:
+def embed_chunks(texts: list[str]) -> list[list[float]]:
     """
     Generate L2-normalised embeddings for a list of texts.
     Returns a list of float lists (one embedding per text).
@@ -44,7 +41,7 @@ def embed_chunks(texts: List[str]) -> List[List[float]]:
     return embeddings.astype(np.float32).tolist()
 
 
-def embed_query(text: str) -> List[float]:
+def embed_query(text: str) -> list[float]:
     """Generate a single embedding vector for a query string."""
     model = _get_model()
     embedding = model.encode(

@@ -2,7 +2,7 @@
 Vector Store — Edu Nexus (Semantic Brain)
 ==========================================
 Qdrant-backed vector store using sentence-transformers for dense
-semantic retrieval. Replaces FAISS with local embedded Qdrant.
+semantic retrieval.
 
 All vectors carry workspace_id + doc_id in their payload for
 workspace-scoped filtered retrieval.

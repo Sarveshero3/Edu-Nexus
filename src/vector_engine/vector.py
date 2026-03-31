@@ -2,7 +2,7 @@
 Vector Utilities — Edu Nexus
 ==============================
 Embedding generation using sentence-transformers.
-FAISS/LangChain dependencies removed — Qdrant is now the vector backend.
+Qdrant is the vector backend; this module handles raw embedding operations.
 """
 
 import logging

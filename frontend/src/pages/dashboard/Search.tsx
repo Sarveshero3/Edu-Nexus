@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
 import { search as apiSearch, type SearchResult, type SearchHit } from '@/lib/api'
 import { useWorkspace } from '@/stores/workspaceStore'
 
-const filters = ['All', 'BM25', 'FAISS', 'Neo4j'] as const
+const filters = ['All', 'BM25', 'Qdrant', 'Graph'] as const
 
 export default function SearchPage() {
   const [params] = useSearchParams()
@@ -46,10 +46,10 @@ export default function SearchPage() {
     }
   }
 
-  const engineMap: Record<string, 'bm25' | 'faiss' | 'neo4j'> = {
+  const engineMap: Record<string, string> = {
     bm25: 'bm25',
-    faiss: 'faiss',
-    neo4j: 'neo4j',
+    qdrant: 'faiss',
+    graph: 'neo4j',
   }
 
   return (

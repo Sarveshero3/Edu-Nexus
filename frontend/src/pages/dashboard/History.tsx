@@ -14,7 +14,7 @@ import { useWorkspace, type Message } from '@/stores/workspaceStore'
  * ordered by most recent. Each entry is expandable.
  */
 
-const tabs = ['All', 'BM25', 'FAISS', 'Neo4j', 'Hybrid'] as const
+const tabs = ['All', 'BM25', 'Qdrant', 'Graph', 'Hybrid'] as const
 
 interface FlatEntry {
   id: string

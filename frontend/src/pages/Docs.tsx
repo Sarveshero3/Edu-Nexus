@@ -103,8 +103,8 @@ export default function Docs() {
 
               <p className="text-text-muted leading-relaxed mb-6">
                 Edu Nexus is an academic AI platform powered by a tri-hybrid RAG (Retrieval-Augmented
-                Generation) engine. It combines BM25 keyword search, FAISS vector similarity, and
-                Neo4j knowledge graph traversal to deliver comprehensive answers from your uploaded
+                Generation) engine. It combines BM25 keyword search, Qdrant vector similarity, and
+                NetworkX knowledge graph traversal to deliver comprehensive answers from your uploaded
                 research documents.
               </p>
 
@@ -130,8 +130,8 @@ edu-nexus init --project my-research`}
               {/* Warning callout */}
               <div className="border-l-4 border-amber-500 bg-amber-500/5 rounded-r-[12px] p-4 mb-6">
                 <p className="text-sm text-text-primary">
-                  <strong>⚠️ Warning:</strong> Neo4j requires a running instance for graph features.
-                  Make sure to configure the connection string in your environment variables.
+                  <strong>⚠️ Note:</strong> Graph features are powered by NetworkX and require no external database.
+                  Graphs are built automatically during document ingestion.
                 </p>
               </div>
 

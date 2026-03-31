@@ -1,14 +1,14 @@
 # Edu Nexus — Tri-Hybrid GraphRAG Academic Engine
 
-**Edu Nexus** is a zero-cost university semantic search engine powered by a **Tri-Hybrid RAG** strategy (BM25 + FAISS + Neo4j). Upload research papers, query across three AI retrieval engines, and build knowledge graphs — all in one unified academic workspace.
+**Edu Nexus** is a zero-cost university semantic search engine powered by a **Tri-Hybrid RAG** strategy (BM25 + Qdrant + NetworkX). Upload research papers, query across three AI retrieval engines, and build knowledge graphs — all in one unified academic workspace.
 
 ## Architecture
 
 | Brain | Engine | Purpose |
 |-------|--------|---------|
-| **Semantic** | FAISS + SentenceTransformers | Vector similarity search over document embeddings |
+| **Semantic** | Qdrant + SentenceTransformers | Vector similarity search over document embeddings |
 | **Keyword** | BM25 (Okapi) | Exact-match lexical retrieval |
-| **Graph** | Neo4j + Groq LLM | Knowledge graph traversal and relationship discovery |
+| **Graph** | NetworkX + GLiNER | Knowledge graph traversal and relationship discovery |
 
 A Groq-hosted LLM acts as the **intelligent router**, deciding which brain(s) to invoke per query, then fusing the results into a final grounded answer with chain-of-thought transparency.
 
@@ -18,25 +18,27 @@ A Groq-hosted LLM acts as the **intelligent router**, deciding which brain(s) to
 |-------|-----------|
 | Backend | Python 3, FastAPI (port 8000) |
 | Frontend | Vite + React 18 + TypeScript + Tailwind CSS 3 (port 5173) |
-| State | Zustand (auth, workspaces, sidebar) |
+| State | Zustand (auth, workspaces, sidebar, theme) |
 | Data Fetching | TanStack Query + Axios |
 | 3D Background | Spline (WebGL) |
 | Animations | Framer Motion, MagicUI |
 | LLM | Groq (query routing + answer generation) |
-| Graph DB | Neo4j Aura |
-| Vector DB | FAISS (local, disk-persisted) |
+| Graph Engine | NetworkX (local, JSON-persisted per workspace) |
+| NER | GLiNER (local model, no API calls) |
+| Vector DB | Qdrant (local embedded mode, disk-persisted) |
 | Embeddings | `all-MiniLM-L6-v2` (SentenceTransformers) |
 
 ## Features
 
 - **Multi-format Upload**: PDF, DOCX, TXT, PPTX, XLSX, CSV, MD — drag-and-drop batch ingestion
 - **Tri-Hybrid RAG Chat**: Ask questions and get answers grounded in your documents with visible chain-of-thought
-- **Knowledge Graph Explorer**: Neo4j Aura–style full-screen visualization with 4 layout modes (Force, Radial, Hierarchy, Grid)
+- **Knowledge Graph Explorer**: Full-screen visualization with 4 layout modes (Force, Radial, Hierarchy, Grid)
 - **Workspace Management**: Organize documents and chats into named workspaces
 - **Document Viewer**: Read ingested chunks with inline AI chat
-- **Search**: Cross-engine search with filter tabs (BM25 / FAISS / Graph)
+- **Search**: Cross-engine search with filter tabs (BM25 / Qdrant / Graph)
 - **Query History**: Browse and manage past queries with engine tags
 - **Engine Settings**: Tune retrieval weights per engine
+- **Single-User Auth**: Secure local authentication with bcrypt + session tokens
 
 ## Quick Start
 
@@ -82,18 +84,22 @@ Open **http://localhost:5173** in your browser.
 ### Environment Variables (`.env`)
 ```
 GROQ_API_KEY=your_groq_api_key
-NEO4J_URI=neo4j+s://your_instance.databases.neo4j.io
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=your_password
 ```
+
+> **Note**: No external database required. Qdrant runs in embedded mode and NetworkX graphs are stored as local JSON files. All data lives in the `data/` directory.
 
 ## API Surface
 
-14 REST endpoints + 1 WebSocket on `http://localhost:8000`:
+REST endpoints on `http://localhost:8000`:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/status` | Engine readiness + ingested document count |
+| POST | `/api/auth/register` | Register a new account |
+| POST | `/api/auth/login` | Login with credentials |
+| POST | `/api/auth/logout` | End session |
+| GET | `/api/auth/status` | Check auth state |
+| POST | `/api/auth/delete-account` | Wipe all data and account |
+| GET | `/api/status` | Engine readiness + document counts |
 | GET | `/api/sources` | List all ingested documents |
 | POST | `/api/sources/upload` | Upload files → full ingestion pipeline |
 | DELETE | `/api/sources/{name}` | Remove a source + rebuild indices |
@@ -101,13 +107,13 @@ NEO4J_PASSWORD=your_password
 | POST | `/api/chat` | RAG query → answer + chain-of-thought |
 | GET | `/api/history` | Past queries |
 | DELETE | `/api/history/{id}` | Delete a history entry |
-| GET | `/api/graph/nodes` | All Neo4j nodes |
-| GET | `/api/graph/edges` | All Neo4j edges |
+| GET | `/api/graph/nodes` | All graph nodes (supports `min_frequency` filter) |
+| GET | `/api/graph/edges` | All graph edges (supports `min_weight` filter) |
 | GET | `/api/graph/node/{name}` | Node detail + connections |
 | GET | `/api/search?q=&engine=` | Targeted search |
 | GET | `/api/settings/engines` | Load engine weights |
 | POST | `/api/settings/engines` | Save engine weights |
-| WS | `/ws/chat` | Legacy WebSocket chat |
+| GET | `/api/jobs/{job_id}` | Poll ingestion job status |
 
 ## Project Structure
 
@@ -117,14 +123,15 @@ NEO4J_PASSWORD=your_password
 Edu-Nexus/
 ├── frontend/          # Vite + React + TypeScript SPA
 ├── src/               # Python backend — retrieval engines
-│   ├── graph_engine/  # Neo4j knowledge graph pipeline
+│   ├── auth/          # Single-user auth (bcrypt + session tokens)
+│   ├── graph_engine/  # NetworkX knowledge graph pipeline + GLiNER NER
 │   ├── ingest/        # Document loading, extraction, cleaning
 │   ├── orchestrator/  # Central query router (manager.py)
 │   ├── pipeline/      # Full ingestion workflow glue
 │   ├── retrieval/     # BM25 keyword index
 │   ├── splitter/      # Text chunking logic
-│   └── vector_engine/ # FAISS vector store
-├── server.py          # FastAPI REST API (14 endpoints)
+│   └── vector_engine/ # Qdrant vector store
+├── server.py          # FastAPI REST API
 ├── config.py          # Centralized configuration
 ├── setup.bat          # One-time environment setup
 └── run.bat            # Start backend + frontend
@@ -136,7 +143,7 @@ Edu-Nexus/
 |------|--------|-------|
 | Arch / Core | Sarvesh | Orchestrator, Graph Logic, Frontend, API |
 | Data Eng | Swaraj | PDF Cleaning Pipeline |
-| Vector Eng | Saatvik | Chunking & FAISS Store |
+| Vector Eng | Saatvik | Chunking & Vector Store |
 | QA / Ops | Kulvansh | Data Collection |
 
 ## License

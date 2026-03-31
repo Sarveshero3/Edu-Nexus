@@ -33,12 +33,17 @@ wheels/
 .env.*.local
 
 # ── Data Storage (don't commit user data) ──
+data/auth/*
 data/raw/*
 data/processed/*
-data/artifacts/*
+data/artifacts/**
+!data/auth/.gitkeep
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/artifacts/.gitkeep
+!data/artifacts/qdrant/.gitkeep
+!data/artifacts/bm25/.gitkeep
+!data/artifacts/graphs/.gitkeep
 
 # ── IDE / Editor ──
 .vscode/

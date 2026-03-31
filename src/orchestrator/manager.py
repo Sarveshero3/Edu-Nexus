@@ -5,7 +5,7 @@ The central nervous system of Edu Nexus.  An **LLM Router**
 analyses each query and *decides* which retrieval brain(s) to invoke:
 
   1. Fast Brain   — BM25 keyword search   (src.retrieval.bm25_index)
-  2. Deep Brain   — NetworkX knowledge graph  (src.graph_engine.neo4j_ops)
+  2. Deep Brain   — NetworkX knowledge graph  (src.graph_engine)
   3. Semantic Brain — Qdrant vector search  (src.vector_engine.store)
 
 Only the chosen brain(s) execute.  Results are fused into a

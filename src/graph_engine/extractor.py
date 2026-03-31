@@ -78,7 +78,7 @@ def build_graph_data(
 ) -> tuple[list[dict], list[dict]]:
     """
     Process all chunks from one document.
-    Returns (nodes, edges) ready for neo4j_ops.upsert_graph.
+    Returns (nodes, edges) ready for graph upsert.
 
     Node schema:
         id          : str  (lowercased entity text — stable key)

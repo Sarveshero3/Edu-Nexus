@@ -32,7 +32,7 @@ export default function SignIn() {
   useEffect(() => {
     authStatus().then((status) => {
       if (status.registered) {
-        setExistingUser(status.username)
+        setExistingUser(status.username ?? null)
         // If already logged in, redirect
         if (status.logged_in) {
           navigate('/dashboard/sources', { replace: true })

@@ -27,12 +27,12 @@ const steps = [
   {
     title: 'Tri-Hybrid Processing',
     highlight: 'Tri-Hybrid',
-    desc: 'Three AI brains work simultaneously — BM25 for keywords, FAISS for semantic understanding, Neo4j for knowledge relationships.',
+    desc: 'Three AI brains work simultaneously — BM25 for keywords, Qdrant for semantic understanding, NetworkX for knowledge relationships.',
     color: 'purple',
     items: [
       { icon: Zap, label: 'BM25 Keyword Index', size: 'Fast' },
-      { icon: Database, label: 'FAISS Vector Store', size: 'Semantic' },
-      { icon: Network, label: 'Neo4j Graph', size: 'Relations' },
+      { icon: Database, label: 'Qdrant Vector Store', size: 'Semantic' },
+      { icon: Network, label: 'NetworkX Graph', size: 'Relations' },
     ],
   },
   {

@@ -2,7 +2,7 @@
 Graph Builder — Edu Nexus
 ===========================
 Orchestrates: extract entities from chunks → upsert into workspace graph.
-Uses GLiNER-based extractor (no API calls) and NetworkX-based neo4j_ops.
+Uses GLiNER-based extractor (no API calls) and NetworkX for graph storage.
 """
 
 import logging

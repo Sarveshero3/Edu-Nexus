@@ -1,11 +1,11 @@
 """
 Graph Database Layer — Edu Nexus
 ==================================
-Replaces Neo4j with NetworkX + JSON file persistence.
+NetworkX + JSON file persistence for knowledge graphs.
 Each workspace gets its own graph file: data/artifacts/graphs/graph_{workspace_id}.json
 
 The frontend API contract (/api/graph/nodes, /api/graph/edges, /api/graph/node/{name})
-remains identical — only the backend storage changes.
+is served by this module.
 """
 
 import json

@@ -42,7 +42,7 @@ export default function SignUp() {
   useEffect(() => {
     authStatus().then((status) => {
       if (status.registered) {
-        setExistingUser(status.username)
+        setExistingUser(status.username ?? null)
         setShowDisclaimer(true)
       }
     }).catch(() => {})

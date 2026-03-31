@@ -600,9 +600,9 @@ async def chat(request: Request, body: ChatRequest):
     elif "keyword" in chosen:
         engine_used = "bm25"
     elif "semantic" in chosen:
-        engine_used = "faiss"
+        engine_used = "qdrant"
     elif "graph" in chosen:
-        engine_used = "neo4j"
+        engine_used = "graph"
     else:
         engine_used = "none"
 
@@ -826,7 +826,7 @@ async def get_graph_node_detail(request: Request, node_name: str, workspace_id: 
 async def search_endpoint(
     request: Request,
     q: str = Query(..., description="Search query"),
-    engine: Optional[str] = Query(None, description="Engine: bm25, faiss, neo4j, or all"),
+    engine: Optional[str] = Query(None, description="Engine: bm25, qdrant, graph, or all"),
     workspace_id: str = Query("default"),
 ):
     """Run a targeted search across the tri-hybrid engines."""
@@ -849,18 +849,18 @@ async def search_endpoint(
                     "score": hit.get("score"),
                 })
 
-        if engine in ("faiss", "all"):
+        if engine in ("qdrant", "faiss", "all"):
             query_vec = vec_embed_query(q)
-            faiss_hits = store.search(workspace_id, query_vec, top_k=10)
-            for i, hit in enumerate(faiss_hits):
+            vec_hits = store.search(workspace_id, query_vec, top_k=10)
+            for i, hit in enumerate(vec_hits):
                 results["hits"].append({
-                    "engine": "faiss",
+                    "engine": "qdrant",
                     "rank": i + 1,
                     "text": hit.get("text", "")[:300],
                     "score": round(hit.get("score", 0), 4),
                 })
 
-        if engine in ("neo4j", "all"):
+        if engine in ("graph", "neo4j", "all"):
             # Extract keywords for graph search
             stopwords = {
                 "what", "is", "the", "a", "an", "of", "to", "and", "in",
@@ -873,7 +873,7 @@ async def search_endpoint(
             graph_hits = neo4j_ops.search_graph(workspace_id, keywords)
             for i, node in enumerate(graph_hits):
                 results["hits"].append({
-                    "engine": "neo4j",
+                    "engine": "graph",
                     "rank": i + 1,
                     "text": f"{node.get('id', '?')} ({node.get('label', 'entity')})",
                     "score": None,

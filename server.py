@@ -10,6 +10,7 @@ Now with:
   - Rate limiting via slowapi
 """
 
+import asyncio
 import uvicorn
 import json
 import shutil
@@ -22,6 +23,7 @@ from typing import Optional
 from fastapi import (
     FastAPI, UploadFile, File, Form, HTTPException,
     Query, WebSocket, WebSocketDisconnect, BackgroundTasks, Request,
+    Body,
 )
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -79,6 +81,9 @@ suggestions_source_hash: str = ""
 
 # ── Async job tracking ────────────────────────────────────────────────
 ingestion_jobs: dict[str, dict] = {}
+
+# ── Concurrency limiter — prevent multiple pipeline runs overwhelming CPU/RAM
+_INGESTION_SEMAPHORE = asyncio.Semaphore(2)
 
 
 # ── Session Token Middleware ──────────────────────────────────────────
@@ -363,12 +368,26 @@ async def upload_sources(
     """Upload documents and trigger background ingestion pipeline."""
     validate_workspace_id(workspace_id)
 
-    # Validate file extensions and sizes
+    # Validate file extensions, MIME types, and sizes
+    _SAFE_MIMES = {
+        ".pdf": "application/pdf",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".csv": "text/csv",
+        ".txt": "text/plain",
+        ".md": "text/markdown",
+    }
     file_contents = []
     for file in files:
         ext = Path(file.filename).suffix.lower()
         if ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(400, f"File type {ext} not allowed.")
+        # Cross-check MIME type — reject if declared content_type doesn't match
+        declared = (file.content_type or "").split(";")[0].strip().lower()
+        expected = _SAFE_MIMES.get(ext, "application/octet-stream")
+        if declared and declared != "application/octet-stream" and declared != expected:
+            logger.warning(f"MIME mismatch for {file.filename}: expected={expected}, got={declared}")
         content = await file.read()
         if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
             raise HTTPException(400, f"{file.filename} exceeds {MAX_FILE_SIZE_MB}MB limit.")
@@ -395,7 +414,7 @@ async def upload_sources(
     # Create job and start background ingestion
     job_id = _make_job([p.name for p in saved_paths])
 
-    def run_all():
+    async def run_all():
         total_files = len(saved_paths)
         for idx, path in enumerate(saved_paths):
             fname = path.name
@@ -409,7 +428,11 @@ async def upload_sources(
                     overall = int(((idx * 100) + pct) / total_files)
                     _update_job(job_id, f"{fname}: {stage}", min(overall, 99))
 
-                result = run_pipeline(path, workspace_id, on_progress=file_progress)
+                # Acquire semaphore to limit concurrent pipeline runs
+                async with _INGESTION_SEMAPHORE:
+                    result = await asyncio.to_thread(
+                        run_pipeline, path, workspace_id, file_progress
+                    )
                 chunks = result.get("chunks", 0)
                 warning = result.get("warning")
                 _update_file_status(
@@ -1069,20 +1092,33 @@ async def process_and_return(request: Request, file: UploadFile = File(...)):
         tmp_path = Path(tmp.name)
 
     try:
-        from src.ingest.extractor import extract_text
-        from src.ingest.chunker import chunk_pages
+        from src.pipeline.run_pipeline import _extract_text_with_fallback
+        from src.ingest.cleaner import clean_pages, chunk_text_by_sentences
         from src.graph_engine.extractor import build_graph_data
 
-        pages = extract_text(tmp_path)
-        if not pages:
+        # Use same Docling-first extraction chain as run_pipeline
+        pages = _extract_text_with_fallback(tmp_path)
+        if not pages or not any(p.strip() for p in pages):
             raise HTTPException(422, "No text could be extracted from this file")
 
-        chunks = chunk_pages(pages)
-        graph_data = build_graph_data(chunks)
+        # Clean → chunk (same pipeline as run_pipeline.py)
+        cleaned_text = clean_pages(pages, source_type=ext.lstrip("."))
+        raw_chunks = chunk_text_by_sentences(cleaned_text, max_tokens=500, overlap=100)
+        chunk_texts = [text for (_, _, text) in raw_chunks]
+
+        if not chunk_texts:
+            raise HTTPException(422, "Document produced no usable text chunks")
+
+        # Build graph data from chunk texts
+        nodes, edges = build_graph_data(chunk_texts, file.filename or "unknown", "_stateless")
+        graph_data = {
+            "nodes": [{"id": n["id"], "name": n["id"], "group": n["label"], "frequency": n["frequency"]} for n in nodes],
+            "edges": [{"source": e["source"], "target": e["target"], "relation": e["relation"], "weight": e["weight"]} for e in edges],
+        }
 
         return ok({
             "filename": file.filename,
-            "chunks": chunks,
+            "chunks": chunk_texts,
             "graph": graph_data,
         })
     finally:
@@ -1112,8 +1148,7 @@ async def query_with_context(request: Request, body: dict = Body(...)):
 
     # Use the answer LLM directly (skip routing since we have context)
     try:
-        orchestrator = OrchestratorManager()
-        answer = await orchestrator.answer_with_context(query, context_block)
+        answer = await manager.answer_with_context(query, context_block)
         return ok(answer)
     except Exception as e:
         logger.error(f"query-with-context failed: {e}")

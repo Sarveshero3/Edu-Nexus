@@ -38,3 +38,28 @@ description: Session memory — tracks what was done and what to do next
 - Test markdown rendering by asking a question that produces tables/lists
 - Test sidebar collapse/drag
 - Upload a new document to see improved graph relations
+
+## Session: 2026-04-01
+
+### Completed — Final Audit & Hardening
+- **`.gitignore` fixed**: Removed `.agents/` exclusion so project workflows are committed. Added `.gemini/` exclusion instead.
+- **`.gitkeep` files created**: All 7 data subdirectories now have `.gitkeep` for fresh-clone safety.
+- **`server.py` bug fixes**:
+  - Added missing `Body` import from FastAPI (used by `/api/query-with-context`).
+  - Fixed `process-and-return` endpoint: replaced broken `from src.ingest.chunker import chunk_pages` (module didn't exist) with correct `clean_pages + chunk_text_by_sentences` from `cleaner.py`.
+  - Fixed `build_graph_data()` call arity — was missing required `doc_id` and `workspace_id` args.
+  - Fixed `query-with-context` — was creating a new `OrchestratorManager()` every request instead of using global `manager`.
+- **Ingestion semaphore**: Added `asyncio.Semaphore(2)` to limit concurrent pipeline runs. Background task converted to async with `asyncio.to_thread`.
+- **MIME validation**: Upload endpoint now cross-checks `content_type` against expected MIME for the file extension.
+- **24-hour session expiry**: `auth_manager.py` now stores `created_at` timestamps on sessions and auto-expires them after 24 hours. Legacy sessions force re-login.
+- **GLiNER windowed splitting**: Verified already implemented in `_split_for_gliner()`.
+- **Docling fallback**: Verified already integrated in `run_pipeline.py._extract_text_with_fallback()`.
+- **Stateless endpoints**: Both `/api/process-and-return` and `/api/query-with-context` are now correctly wired.
+- **IndexedDB storage**: `frontend/src/lib/storage.ts` verified complete.
+
+### Deployment Note
+- **Not Railway** — deploying through college infrastructure. Railway files (Procfile, railway.toml, runtime.txt) kept but not actively used.
+
+### Known Issues (Resolved)
+- Auth is now real (bcrypt-based, session-token, 24h expiry)
+- `src.ingest.chunker` module never existed — was a phantom import, now fixed

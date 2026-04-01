@@ -20,6 +20,7 @@ import json
 import logging
 import secrets
 import shutil
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -40,6 +41,8 @@ SESSION_FILE = AUTH_DIR / "session.json"
 
 class AuthManager:
     """Single-user local authentication manager."""
+
+    SESSION_MAX_AGE = timedelta(hours=24)
 
     def __init__(self) -> None:
         AUTH_DIR.mkdir(parents=True, exist_ok=True)
@@ -100,6 +103,7 @@ class AuthManager:
         self._write_json(SESSION_FILE, {
             "token": token,
             "username": username,
+            "created_at": datetime.now(timezone.utc).isoformat(),
         })
 
         logger.info(f"User '{username}' registered successfully.")
@@ -127,6 +131,7 @@ class AuthManager:
         self._write_json(SESSION_FILE, {
             "token": token,
             "username": stored_username,
+            "created_at": datetime.now(timezone.utc).isoformat(),
         })
 
         logger.info(f"User '{stored_username}' logged in.")
@@ -145,13 +150,33 @@ class AuthManager:
         """
         Validate a session token.
         Returns {"username": str} if valid, None otherwise.
+        Sessions older than SESSION_MAX_AGE are auto-expired.
         """
         if not token:
             return None
         session = self._read_json(SESSION_FILE)
-        if session and session.get("token") == token:
-            return {"username": session.get("username", "")}
-        return None
+        if not session or session.get("token") != token:
+            return None
+
+        # Check session age — expire after 24 hours
+        created_str = session.get("created_at")
+        if created_str:
+            try:
+                created = datetime.fromisoformat(created_str)
+                if datetime.now(timezone.utc) - created > self.SESSION_MAX_AGE:
+                    logger.info("Session expired (>24h), invalidating.")
+                    SESSION_FILE.unlink(missing_ok=True)
+                    return None
+            except (ValueError, TypeError):
+                # Malformed timestamp — treat as expired
+                SESSION_FILE.unlink(missing_ok=True)
+                return None
+        else:
+            # Legacy session without timestamp — force re-login
+            SESSION_FILE.unlink(missing_ok=True)
+            return None
+
+        return {"username": session.get("username", "")}
 
     def delete_account(self) -> bool:
         """

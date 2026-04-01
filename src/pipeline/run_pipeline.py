@@ -22,18 +22,53 @@ logger = logging.getLogger("Pipeline")
 
 
 def _extract_text_with_fallback(file_path: Path) -> list[str]:
-    """Extract text using Docling (if enabled) or default extractors."""
+    """
+    Extract text using a priority chain:
+      1. Docling (primary — best quality for PDFs/PPTX/scanned docs)
+      2. Default extractors (pdfplumber, python-docx, etc.)
+      3. OCR fallback (pytesseract)
+
+    Docling is tried first when DOCLING_ENABLED=true (default).
+    If Docling fails or returns empty text, falls back silently.
+    """
+    # ── Priority 1: Docling ──────────────────────────────────────
     if DOCLING_ENABLED:
         try:
-            from src.ingest.docling_extractor import extract_with_docling
-            text = extract_with_docling(file_path)
-            if text and text.strip():
-                # Docling returns one big markdown string; wrap as single "page"
-                return [text]
-            logger.warning(f"Docling returned empty text for {file_path.name}, falling back")
+            from src.ingest.docling_extractor import extract_with_docling, DOCLING_AVAILABLE
+            if DOCLING_AVAILABLE:
+                text = extract_with_docling(file_path)
+                if text and text.strip():
+                    logger.info(f"Docling extracted {len(text)} chars from {file_path.name}")
+                    # Docling returns one markdown string; wrap as single "page"
+                    return [text]
+                logger.warning(f"Docling returned empty text for {file_path.name}, falling back")
+            else:
+                logger.info("Docling not installed, falling back to default extractor")
         except Exception as e:
-            logger.warning(f"Docling failed ({e}), falling back to default extractor")
-    return extract_text(file_path)
+            logger.warning(f"Docling failed for {file_path.name} ({e}), falling back")
+
+    # ── Priority 2: Default extractors ───────────────────────────
+    pages = extract_text(file_path)
+    if pages and any(p.strip() for p in pages):
+        logger.info(f"Default extractor produced {len(pages)} pages from {file_path.name}")
+        return pages
+
+    # ── Priority 3: OCR fallback (images/scanned PDFs only) ────────
+    ocr_extensions = {".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".gif"}
+    if file_path.suffix.lower() in ocr_extensions:
+        logger.warning(f"Default extractor produced no text for {file_path.name}, trying OCR")
+        try:
+            from src.ingest.ocr import OCR
+            ocr = OCR()
+            ocr_text = ocr.image_to_text(str(file_path))
+            if ocr_text and ocr_text.strip():
+                logger.info(f"OCR extracted {len(ocr_text)} chars from {file_path.name}")
+                return [ocr_text]
+        except Exception as e:
+            logger.warning(f"OCR fallback failed for {file_path.name}: {e}")
+
+    # Nothing worked — return whatever we got (may be empty)
+    return pages or []
 
 
 def run_pipeline(

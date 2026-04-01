@@ -46,6 +46,5 @@ fastapi>=0.109.0
 uvicorn>=0.27.0
 python-multipart>=0.0.6
 slowapi>=0.1.9                # Rate limiting for FastAPI
-
-# --- Optional (not auto-installed) ---
-# pip install docling  (better OCR/extraction for PDFs/PPTX, ~1.5GB models)
+# --- Document Intelligence (Docling — primary extractor) ---
+docling                       # High-quality PDF/PPTX extraction (~1.5GB models)

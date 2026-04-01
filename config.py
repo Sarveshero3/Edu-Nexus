@@ -42,7 +42,7 @@ PORT = int(os.getenv("PORT", 8000))
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 
 # ── Optional features ─────────────────────────────────────────
-DOCLING_ENABLED = os.getenv("DOCLING_ENABLED", "false").lower() == "true"
+DOCLING_ENABLED = os.getenv("DOCLING_ENABLED", "true").lower() == "true"
 
 # ── Ensure all directories exist on import ────────────────────
 for _d in [RAW_DIR, PROCESSED_DIR, QDRANT_DIR, BM25_DIR, GRAPHS_DIR, AUTH_DIR]:

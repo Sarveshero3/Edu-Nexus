@@ -55,11 +55,11 @@ data/artifacts/**
 # ── Jupyter ──
 .ipynb_checkpoints/
 
-# ── Agent context (private) ──
-.agent/
-.agent
-.agents/
-.agents
+# ── Agent context ──
+# NOTE: .agents/ is NOT ignored — it contains project workflows and context
+# that must be present in the deployed codebase.
+# Only ignore the Gemini/IDE agent cache:
+.gemini/
 
 # ── Frontend ──
 frontend/node_modules/

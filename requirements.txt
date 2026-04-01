@@ -1,0 +1,50 @@
+# ============================================================
+#  Edu Nexus — Requirements (Updated 2026-03-25)
+# ============================================================
+
+# --- Core & Environment ---
+python-dotenv>=1.0.0
+numpy>=1.24.0
+pandas>=2.0.0
+
+# --- LLM Integration (The Brains) ---
+groq>=0.5.0                   # Main LLM Interface (Groq Cloud)
+requests>=2.31.0              # NVIDIA API fallback for LLM rate-limit resilience
+
+# --- Vector Database (Semantic Brain — Qdrant) ---
+qdrant-client>=1.9.0          # Local embedded vector store
+sentence-transformers>=2.7.0  # Local embeddings (all-MiniLM-L6-v2)
+tf-keras                      # Backward-compat shim for Keras 3 / Transformers
+
+# --- Graph Database (Deep Brain — NetworkX) ---
+networkx>=3.3                 # Local in-memory knowledge graph
+
+# --- NER (Entity Extraction — GLiNER) ---
+gliner>=0.2.0                 # Local NER model for entity extraction
+
+# --- Keyword Search (Fast Brain — BM25) ---
+rank_bm25>=0.2.2              # Okapi BM25 keyword retrieval
+
+# --- PDF & Document Processing ---
+pdfplumber                    # PDF text extraction
+pypdf>=4.2.0                  # Alternate PDF reader
+python-docx                   # DOCX support
+python-pptx                   # PPTX (PowerPoint) text extraction
+openpyxl                      # XLSX (Excel) text extraction
+pillow                        # Image processing (OCR fallback)
+pytesseract                   # OCR engine binding
+
+# --- Authentication ---
+bcrypt>=4.0.0                 # Password hashing for single-user auth
+
+# --- Utilities ---
+tqdm>=4.66.0                  # Progress bars
+regex                         # Advanced regex patterns
+
+# --- UI & Deployment ---
+fastapi>=0.109.0
+uvicorn>=0.27.0
+python-multipart>=0.0.6
+slowapi>=0.1.9                # Rate limiting for FastAPI
+# --- Document Intelligence (Docling — primary extractor) ---
+docling                       # High-quality PDF/PPTX extraction (~1.5GB models)

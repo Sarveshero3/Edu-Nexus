@@ -45,7 +45,7 @@ export function applyTheme(theme: Theme, accentColor: AccentColor) {
 export const useTheme = create<ThemeState>()(
   persist(
     (set, get) => ({
-      theme: 'dark',
+      theme: 'system',
       accentColor: 'cyan',
 
       setTheme: (theme: Theme) => {

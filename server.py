@@ -104,9 +104,10 @@ class SessionAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         path = request.url.path
 
-        # Skip non-API, auth-exempt, jobs, and WebSocket routes
+        # Skip non-API, auth-exempt, jobs, WebSocket, and CORS preflight routes
         if (
-            not path.startswith("/api/")
+            request.method == "OPTIONS"
+            or not path.startswith("/api/")
             or path in AUTH_EXEMPT_PATHS
             or path.startswith("/api/jobs/")
             or path.startswith("/ws")

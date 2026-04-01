@@ -180,10 +180,11 @@ export default function Sources() {
       // If we got a job_id, poll for completion to get real chunk counts
       if (result.job_id) {
         const jobId = result.job_id
-        // Add all files to workspace immediately
-        for (const r of result.results) {
+        // Add all files to workspace immediately (backend returns `files: string[]`, not `results`)
+        const fileNames = result.files || []
+        for (const fname of fileNames) {
           if (activeWorkspaceId) {
-            addSourceToWorkspace(activeWorkspaceId, r.filename)
+            addSourceToWorkspace(activeWorkspaceId, fname)
           }
         }
         setUploadJobs(jobs.map((j) => ({
@@ -246,9 +247,10 @@ export default function Sources() {
       }
 
       // Non-job response (sync upload)
+      const results = result.results || []
       setUploadJobs(
         jobs.map((j) => {
-          const r = result.results.find((res) => res.filename === j.file.name)
+          const r = results.find((res) => res.filename === j.file.name)
           if (!r) return { ...j, status: 'error' as const, message: 'Not found in results' }
           if (r.status === 'ok') {
             if (activeWorkspaceId) {

@@ -89,7 +89,7 @@ class AuthManager:
         if not password or len(password) < 4:
             raise ValueError("Password must be at least 4 characters.")
 
-        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12))
 
         self._write_json(USER_FILE, {
             "username": username,

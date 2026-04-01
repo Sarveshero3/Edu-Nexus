@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import re
 
 # ── Base directories ──────────────────────────────────────────
@@ -35,6 +36,13 @@ MAX_FILE_SIZE_MB        = 50
 MAX_UPLOAD_TOTAL_MB     = 200
 ALLOWED_EXTENSIONS      = {".pdf", ".docx", ".txt", ".pptx", ".xlsx", ".csv", ".md"}
 WORKSPACE_ID_PATTERN    = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+# ── Railway deployment ────────────────────────────────────────
+PORT = int(os.getenv("PORT", 8000))
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
+# ── Optional features ─────────────────────────────────────────
+DOCLING_ENABLED = os.getenv("DOCLING_ENABLED", "false").lower() == "true"
 
 # ── Ensure all directories exist on import ────────────────────
 for _d in [RAW_DIR, PROCESSED_DIR, QDRANT_DIR, BM25_DIR, GRAPHS_DIR, AUTH_DIR]:

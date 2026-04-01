@@ -1,5 +1,9 @@
+import logging
+
 import pytesseract
 from PIL import Image
+
+logger = logging.getLogger("OCR")
 
 # path to tesseract executable (Windows)
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -16,5 +20,5 @@ class OCR:
             text = pytesseract.image_to_string(img)
             return text.strip()
         except Exception as e:
-            print(f"OCR error for {image_path}: {e}")
+            logger.warning(f"OCR error for {image_path}: {e}")
             return ""

@@ -10,7 +10,7 @@ import importlib.util
 import logging
 from pathlib import Path
 
-from config import PROCESSED_DIR
+from config import PROCESSED_DIR, DOCLING_ENABLED
 from src.ingest.extractor import extract_text
 from src.vector_engine import vector as vec
 from src.vector_engine import store
@@ -19,6 +19,21 @@ from src.graph_engine.extractor import build_graph_data
 from src.graph_engine.neo4j_ops import upsert_graph
 
 logger = logging.getLogger("Pipeline")
+
+
+def _extract_text_with_fallback(file_path: Path) -> list[str]:
+    """Extract text using Docling (if enabled) or default extractors."""
+    if DOCLING_ENABLED:
+        try:
+            from src.ingest.docling_extractor import extract_with_docling
+            text = extract_with_docling(file_path)
+            if text and text.strip():
+                # Docling returns one big markdown string; wrap as single "page"
+                return [text]
+            logger.warning(f"Docling returned empty text for {file_path.name}, falling back")
+        except Exception as e:
+            logger.warning(f"Docling failed ({e}), falling back to default extractor")
+    return extract_text(file_path)
 
 
 def run_pipeline(
@@ -38,7 +53,7 @@ def run_pipeline(
 
     # ── Extract text ──────────────────────────────────────────────
     progress("extracting text", 5)
-    pages = extract_text(file_path)
+    pages = _extract_text_with_fallback(file_path)
     if not pages:
         raise ValueError(f"No text extracted from {file_path.name}")
 

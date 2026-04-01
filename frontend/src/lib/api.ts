@@ -1,7 +1,12 @@
 import axios from 'axios'
 
+// Use VITE_API_URL for deployed environments, fallback to '/api' for local dev
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api'
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE,
 })
 
 // Attach session token to every request
@@ -162,7 +167,7 @@ export async function getSourceContent(name: string, workspaceId: string = 'defa
 }
 
 export function getSourceFileUrl(name: string, workspaceId: string = 'default') {
-  return `/api/sources/${encodeURIComponent(name)}/file?workspace_id=${encodeURIComponent(workspaceId)}`
+  return `${API_BASE}/sources/${encodeURIComponent(name)}/file?workspace_id=${encodeURIComponent(workspaceId)}`
 }
 
 // ── Jobs ──────────────────────────────────────────────────────────
@@ -250,4 +255,37 @@ export async function getGraphNodeDetail(
     params: { workspace_id: workspaceId },
   })
   return data.data as NodeDetail
+}
+
+// ── Stateless / Deployed Mode ─────────────────────────────────────
+
+/** Process a file and return chunks + graph without server-side storage */
+export async function processAndReturn(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await api.post('/process-and-return', formData, {
+    timeout: 300_000, // 5 min for large docs
+  })
+  return data.data as {
+    filename: string
+    chunks: string[]
+    graph: {
+      nodes: Array<{ id: string; name: string; group: string; frequency: number }>
+      edges: Array<{ source: string; target: string; relation: string; weight: number }>
+    }
+  }
+}
+
+/** Query with context provided from browser storage (no server-side index) */
+export async function queryWithContext(
+  query: string,
+  chunks: string[],
+  sourceFilter?: string[]
+): Promise<ChatResponse> {
+  const { data } = await api.post('/query-with-context', {
+    query,
+    chunks,
+    source_filter: sourceFilter || null,
+  })
+  return data.data as ChatResponse
 }

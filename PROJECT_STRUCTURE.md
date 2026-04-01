@@ -42,6 +42,7 @@ Edu-Nexus/
 │   │   │       └── BlurFade.tsx              # Bidirectional scroll fade+blur
 │   │   ├── lib/
 │   │   │   ├── api.ts               # Typed Axios client with session token interceptor
+│   │   │   ├── storage.ts           # IndexedDB persistence for stateless deployed mode
 │   │   │   └── utils.ts             # cn() utility
 │   │   ├── pages/
 │   │   │   ├── dashboard/
@@ -87,6 +88,7 @@ Edu-Nexus/
 │   ├── ingest/                       # Document Ingestion Pipeline
 │   │   ├── __init__.py
 │   │   ├── cleaner.py                # Regex noise removal + sentence chunking
+│   │   ├── docling_extractor.py      # Opt-in Docling extraction (DOCLING_ENABLED=true)
 │   │   ├── extractor.py              # Multi-format text extraction
 │   │   ├── ocr.py                    # OCR fallback for scanned PDFs
 │   │   └── processor.py              # Raw file → clean text conversion
@@ -113,15 +115,18 @@ Edu-Nexus/
 │       │   ├── pdf/
 │       │   └── ppt/
 │       └── README.md
-├── .env.example                      # Template for API keys
+├── .env.example                      # Template for API keys + deployment vars
 ├── .gitignore
 ├── LICENSE
 ├── MODULE_DETAILS.md                 # Functional module map
+├── Procfile                          # Railway deployment command
 ├── PROJECT_STRUCTURE.md              # This file
 ├── README.md                         # Project readme
-├── config.py                         # Centralized configuration
+├── config.py                         # Centralized configuration (PORT, CORS, Docling)
+├── railway.toml                      # Railway build/deploy/health config
 ├── requirements.txt                  # Python dependencies
 ├── run.bat                           # Start backend + frontend
+├── runtime.txt                       # Python version for Railway
 ├── server.py                         # FastAPI REST API
 └── setup.bat                         # One-time environment setup
 ```

@@ -37,6 +37,7 @@ from starlette.responses import JSONResponse
 from config import (
     RAW_DIR, PROCESSED_DIR, ALLOWED_EXTENSIONS,
     MAX_FILE_SIZE_MB, MAX_DOCS_PER_WORKSPACE, WORKSPACE_ID_PATTERN,
+    ALLOWED_ORIGINS, PORT, DOCLING_ENABLED,
 )
 from src.auth.auth_manager import AuthManager
 from src.orchestrator.manager import OrchestratorManager
@@ -60,10 +61,10 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# ── CORS (Rule 1 from lessons.md: always include Vite + Next ports) ───
+# ── CORS (configurable via ALLOWED_ORIGINS env var) ───────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1044,8 +1045,84 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 # ====================================================================== #
+#  STATELESS / DEPLOYED MODE ENDPOINTS                                     #
+# ====================================================================== #
+
+@app.post("/api/process-and-return")
+@limiter.limit("3/minute")
+async def process_and_return(request: Request, file: UploadFile = File(...)):
+    """
+    Process a document and return chunks + graph data directly.
+    Nothing is stored on the server — the client saves to IndexedDB.
+    """
+    ext = Path(file.filename or "unknown").suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"Unsupported file type: {ext}")
+
+    # Save to temp file for extraction
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
+            raise HTTPException(413, f"File exceeds {MAX_FILE_SIZE_MB}MB limit")
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    try:
+        from src.ingest.extractor import extract_text
+        from src.ingest.chunker import chunk_pages
+        from src.graph_engine.extractor import build_graph_data
+
+        pages = extract_text(tmp_path)
+        if not pages:
+            raise HTTPException(422, "No text could be extracted from this file")
+
+        chunks = chunk_pages(pages)
+        graph_data = build_graph_data(chunks)
+
+        return ok({
+            "filename": file.filename,
+            "chunks": chunks,
+            "graph": graph_data,
+        })
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+@app.post("/api/query-with-context")
+@limiter.limit("10/minute")
+async def query_with_context(request: Request, body: dict = Body(...)):
+    """
+    Answer a query using chunks provided by the client (from IndexedDB).
+    No server-side retrieval — the client sends the context directly.
+    """
+    query = body.get("query", "").strip()
+    chunks = body.get("chunks", [])
+    source_filter = body.get("source_filter")
+
+    if not query:
+        raise HTTPException(400, "Query is required")
+    if not chunks or not isinstance(chunks, list):
+        raise HTTPException(400, "Chunks array is required")
+
+    # Build context block from provided chunks (limit to prevent abuse)
+    MAX_CONTEXT_CHUNKS = 50
+    limited = chunks[:MAX_CONTEXT_CHUNKS]
+    context_block = "\n\n---\n\n".join(limited)
+
+    # Use the answer LLM directly (skip routing since we have context)
+    try:
+        orchestrator = OrchestratorManager()
+        answer = await orchestrator.answer_with_context(query, context_block)
+        return ok(answer)
+    except Exception as e:
+        logger.error(f"query-with-context failed: {e}")
+        raise HTTPException(500, str(e))
+
+
+# ====================================================================== #
 #  ENTRYPOINT                                                              #
 # ====================================================================== #
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("server:app", host="0.0.0.0", port=PORT, reload=True)

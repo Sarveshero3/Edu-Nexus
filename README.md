@@ -16,8 +16,8 @@ A Groq-hosted LLM acts as the **intelligent router**, deciding which brain(s) to
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python 3, FastAPI (port 8000) |
-| Frontend | Vite + React 18 + TypeScript + Tailwind CSS 3 (port 5173) |
+| Backend | Python 3, FastAPI (dynamic PORT via env) |
+| Frontend | Vite + React 18 + TypeScript + Tailwind CSS 3 |
 | State | Zustand (auth, workspaces, sidebar, theme) |
 | Data Fetching | TanStack Query + Axios |
 | 3D Background | Spline (WebGL) |
@@ -38,7 +38,9 @@ A Groq-hosted LLM acts as the **intelligent router**, deciding which brain(s) to
 - **Search**: Cross-engine search with filter tabs (BM25 / Qdrant / Graph)
 - **Query History**: Browse and manage past queries with engine tags
 - **Engine Settings**: Tune retrieval weights per engine
-- **Single-User Auth**: Secure local authentication with bcrypt + session tokens
+- **Single-User Auth**: Secure local authentication with bcrypt (rounds=12) + session tokens
+- **Docling Integration** (opt-in): Higher quality PDF/PPTX extraction with OCR support
+- **Deployment Ready**: Railway backend + Vercel frontend with IndexedDB browser storage
 
 ## Quick Start
 
@@ -84,9 +86,27 @@ Open **http://localhost:5173** in your browser.
 ### Environment Variables (`.env`)
 ```
 GROQ_API_KEY=your_groq_api_key
+ALLOWED_ORIGINS=*                          # Comma-separated CORS origins
+DOCLING_ENABLED=false                      # Set true for enhanced PDF extraction
 ```
 
 > **Note**: No external database required. Qdrant runs in embedded mode and NetworkX graphs are stored as local JSON files. All data lives in the `data/` directory.
+
+### Deploy to Railway + Vercel
+
+```bash
+# Backend (Railway)
+# 1. Push repo to GitHub
+# 2. Connect Railway to your repo
+# 3. Set env vars: GROQ_API_KEY, ALLOWED_ORIGINS=https://your-frontend.vercel.app
+# Railway auto-detects Procfile and runtime.txt
+
+# Frontend (Vercel)
+cd frontend
+# Set env var: VITE_API_URL=https://your-backend.railway.app
+npm run build
+# Deploy dist/ to Vercel
+```
 
 ## API Surface
 
@@ -114,6 +134,8 @@ REST endpoints on `http://localhost:8000`:
 | GET | `/api/settings/engines` | Load engine weights |
 | POST | `/api/settings/engines` | Save engine weights |
 | GET | `/api/jobs/{job_id}` | Poll ingestion job status |
+| POST | `/api/process-and-return` | Stateless: extract chunks + graph, return to client |
+| POST | `/api/query-with-context` | Stateless: answer query with client-provided chunks |
 
 ## Project Structure
 
@@ -125,7 +147,7 @@ Edu-Nexus/
 ├── src/               # Python backend — retrieval engines
 │   ├── auth/          # Single-user auth (bcrypt + session tokens)
 │   ├── graph_engine/  # NetworkX knowledge graph pipeline + GLiNER NER
-│   ├── ingest/        # Document loading, extraction, cleaning
+│   ├── ingest/        # Document loading, extraction, cleaning, Docling
 │   ├── orchestrator/  # Central query router (manager.py)
 │   ├── pipeline/      # Full ingestion workflow glue
 │   ├── retrieval/     # BM25 keyword index
@@ -133,6 +155,9 @@ Edu-Nexus/
 │   └── vector_engine/ # Qdrant vector store
 ├── server.py          # FastAPI REST API
 ├── config.py          # Centralized configuration
+├── Procfile           # Railway deployment
+├── railway.toml       # Railway config
+├── runtime.txt        # Python version spec
 ├── setup.bat          # One-time environment setup
 └── run.bat            # Start backend + frontend
 ```

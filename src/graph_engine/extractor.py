@@ -8,10 +8,14 @@ GLiNER (~80MB) is loaded once on first use and runs in milliseconds/chunk.
 Co-occurrence edges replace LLM-extracted relationships.
 """
 
+import logging
+
 from gliner import GLiNER
 from config import GLINER_MODEL, ACADEMIC_ENTITY_LABELS
 import itertools
 import re
+
+logger = logging.getLogger("GraphExtractor")
 
 _ner_model: GLiNER = None
 
@@ -20,10 +24,23 @@ def get_ner_model() -> GLiNER:
     """Load model once, reuse forever. ~80MB, loads in ~3s on first call."""
     global _ner_model
     if _ner_model is None:
-        print(f"[GLiNER] Loading {GLINER_MODEL} — one-time download ~80MB...")
+        logger.info(f"Loading {GLINER_MODEL} — one-time download ~80MB...")
         _ner_model = GLiNER.from_pretrained(GLINER_MODEL)
-        print("[GLiNER] Model loaded.")
+        logger.info("GLiNER model loaded.")
     return _ner_model
+
+
+def _split_for_gliner(text: str, max_tokens: int = 350) -> list[str]:
+    """Split long text into overlapping windows for GLiNER processing.
+    Prevents silent truncation when chunks exceed GLiNER's 384-token context."""
+    words = text.split()
+    if len(words) <= max_tokens:
+        return [text]
+    chunks = []
+    step = max_tokens - 50  # 50-word overlap
+    for i in range(0, len(words), step):
+        chunks.append(' '.join(words[i:i + max_tokens]))
+    return chunks
 
 
 def clean_entity_text(text: str) -> str | None:
@@ -59,15 +76,18 @@ def extract_entities(text: str) -> list[dict]:
     """
     Extract named entities from a single text chunk.
     Returns: [{"text": str, "label": str}, ...]
+    Splits long text into overlapping windows to avoid GLiNER truncation.
     Deduplicates by lowercased text, rejects noisy entities.
     """
     model = get_ner_model()
-    raw = model.predict_entities(text, ACADEMIC_ENTITY_LABELS, threshold=0.5)
+    sub_chunks = _split_for_gliner(text)
     seen = {}
-    for e in raw:
-        cleaned = clean_entity_text(e["text"])
-        if cleaned and cleaned not in seen:
-            seen[cleaned] = {"text": cleaned, "label": e["label"]}
+    for sub in sub_chunks:
+        raw = model.predict_entities(sub, ACADEMIC_ENTITY_LABELS, threshold=0.5)
+        for e in raw:
+            cleaned = clean_entity_text(e["text"])
+            if cleaned and cleaned not in seen:
+                seen[cleaned] = {"text": cleaned, "label": e["label"]}
     return list(seen.values())
 
 

@@ -12,6 +12,8 @@ A functional guide to every critical component in the **Edu Nexus** Tri-Hybrid G
 ### `config.py`
 **Configuration Hub.** Centralizes paths (`data/raw`, `data/processed`, `data/artifacts`, `data/auth`), embedding model names, and runtime constants. Uses `pathlib.Path` for cross-platform safety and auto-creates directories on import.
 
+**Deployment variables**: `PORT` (env), `ALLOWED_ORIGINS` (env, comma-separated), `DOCLING_ENABLED` (env, opt-in).
+
 ---
 
 ## 🧠 The Orchestrator
@@ -29,7 +31,7 @@ A functional guide to every critical component in the **Edu Nexus** Tri-Hybrid G
 
 ### 1. Graph Engine — `src/graph_engine/`
 Discovers entity relationships using GLiNER (local NER model, no API calls) and stores them as a knowledge graph in NetworkX (JSON-persisted per workspace).
-- **`extractor.py`** — GLiNER-based entity extraction with cleaning filters (max 5 words, min 2 chars, frequency ≥ 2)
+- **`extractor.py`** — GLiNER-based entity extraction with cleaning filters (max 5 words, min 2 chars, frequency ≥ 2). Uses overlapping window splitting (`_split_for_gliner`) to prevent truncation on long chunks.
 - **`builder.py`** — Calls the extractor and orchestrates graph construction
 - **`neo4j_ops.py`** — NetworkX graph CRUD operations (upsert, read, delete, search) with JSON file persistence
 
@@ -49,6 +51,7 @@ Fast lexical matching for exact terminology.
 
 ### `src/ingest/`
 - **`extractor.py`** — Multi-format text extraction (PDF, DOCX, TXT, PPTX, XLSX, CSV, MD)
+- **`docling_extractor.py`** — Opt-in Docling-based extraction for higher quality OCR/table handling (~1.5GB models, activated by `DOCLING_ENABLED=true`)
 - **`processor.py`** — Orchestrates raw file → clean text conversion
 - **`cleaner.py`** — Regex heuristics to strip headers, footers, and noise; includes sentence-based chunking
 - **`ocr.py`** — OCR fallback for scanned PDFs
@@ -86,7 +89,10 @@ A Vite + React 18 + TypeScript SPA with Tailwind CSS.
 | `themeStore.ts` | Theme (dark/light/system) + accent color with CSS variable mapping |
 
 ### API Client — `lib/api.ts`
-Typed Axios client with `X-Session-Token` interceptor and automatic `{ success, data, error }` envelope unwrapping.
+Typed Axios client with `X-Session-Token` interceptor and automatic `{ success, data, error }` envelope unwrapping. Uses `VITE_API_URL` env var for deployment, falls back to `/api` for local dev.
+
+### Browser Storage — `lib/storage.ts`
+IndexedDB-based persistence layer for stateless deployed mode. Stores processed chunks, graph data, and workspace metadata entirely in the browser when the backend has no persistent disk.
 
 ### Pages — `pages/`
 | Page | Route | Purpose |
@@ -134,3 +140,14 @@ Typed Axios client with `X-Session-Token` interceptor and automatic `{ success, 
 | `data/artifacts/qdrant/` | Qdrant vector collections (disk-persisted) |
 | `data/artifacts/bm25/` | BM25 pickle indices per workspace |
 | `data/artifacts/graphs/` | NetworkX graph JSON files per workspace |
+
+---
+
+## 🚀 Deployment
+
+| File | Purpose |
+|------|---------|
+| `Procfile` | Railway web process command |
+| `railway.toml` | Railway build/deploy config with health check |
+| `runtime.txt` | Python version specification |
+| `.env.example` | All environment variables with descriptions |

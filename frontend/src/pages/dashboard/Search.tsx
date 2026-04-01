@@ -46,11 +46,7 @@ export default function SearchPage() {
     }
   }
 
-  const engineMap: Record<string, string> = {
-    bm25: 'bm25',
-    qdrant: 'faiss',
-    graph: 'neo4j',
-  }
+  /* Engine IDs from the backend (bm25, qdrant, graph) match EngineBadge directly */
 
   return (
     <PageTransition className="p-6 lg:p-8">
@@ -130,7 +126,7 @@ export default function SearchPage() {
                       dangerouslySetInnerHTML={{ __html: highlightQuery(r.text) }}
                     />
                     <div className="flex items-center gap-3 mt-3">
-                      <EngineBadge engine={engineMap[r.engine] || r.engine} />
+                      <EngineBadge engine={r.engine} />
                       <span className="text-text-muted text-xs">Rank #{r.rank}</span>
                       {r.score !== null && (
                         <>

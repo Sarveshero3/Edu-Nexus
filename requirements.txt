@@ -12,15 +12,15 @@ groq>=0.5.0                   # Main LLM Interface (Groq Cloud)
 requests>=2.31.0              # NVIDIA API fallback for LLM rate-limit resilience
 
 # --- Vector Database (Semantic Brain — Qdrant) ---
-qdrant-client>=1.9.0          # Local embedded vector store (replaces FAISS)
+qdrant-client>=1.9.0          # Local embedded vector store
 sentence-transformers>=2.7.0  # Local embeddings (all-MiniLM-L6-v2)
 tf-keras                      # Backward-compat shim for Keras 3 / Transformers
 
 # --- Graph Database (Deep Brain — NetworkX) ---
-networkx>=3.3                 # Local in-memory graph (replaces Neo4j)
+networkx>=3.3                 # Local in-memory knowledge graph
 
 # --- NER (Entity Extraction — GLiNER) ---
-gliner>=0.2.0                 # Local NER model (replaces Groq-based extraction)
+gliner>=0.2.0                 # Local NER model for entity extraction
 
 # --- Keyword Search (Fast Brain — BM25) ---
 rank_bm25>=0.2.2              # Okapi BM25 keyword retrieval
@@ -42,7 +42,10 @@ tqdm>=4.66.0                  # Progress bars
 regex                         # Advanced regex patterns
 
 # --- UI & Deployment ---
-fastapi
-uvicorn
-python-multipart
+fastapi>=0.109.0
+uvicorn>=0.27.0
+python-multipart>=0.0.6
 slowapi>=0.1.9                # Rate limiting for FastAPI
+
+# --- Optional (not auto-installed) ---
+# pip install docling  (better OCR/extraction for PDFs/PPTX, ~1.5GB models)

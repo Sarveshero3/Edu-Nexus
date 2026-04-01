@@ -22,6 +22,14 @@ import Profile from '@/pages/Profile'
 import Settings from '@/pages/Settings'
 
 export default function App() {
+  // Apply persisted theme + accent on first render
+  const theme = useTheme((s) => s.theme)
+  const accent = useTheme((s) => s.accentColor)
+
+  useEffect(() => {
+    applyTheme(theme, accent)
+  }, [theme, accent])
+
   return (
     <AnimatePresence mode="wait">
       <Routes>

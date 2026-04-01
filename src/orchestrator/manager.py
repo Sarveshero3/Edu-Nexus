@@ -604,3 +604,58 @@ class OrchestratorManager:
     # Backward-compatible alias
     async def get_response(self, query: str, workspace_id: str = "default") -> dict:
         return await self.generate_answer(query, workspace_id=workspace_id)
+
+    # ── Stateless context mode (for deployed/IndexedDB clients) ──────
+    async def answer_with_context(self, query: str, context_block: str) -> dict:
+        """
+        Answer a query using a pre-built context block (no retrieval).
+        Used by the /api/query-with-context endpoint where chunks come
+        from the client's IndexedDB, not from server-side indexes.
+        """
+        if not context_block.strip():
+            return {
+                "answer": "No context was provided. Please upload documents first.",
+                "engine_used": "none",
+                "chosen_brains": [],
+                "sources": [],
+                "confidence": 0.0,
+                "chain_of_thought": [],
+                "router_reasoning": "No context provided.",
+            }
+
+        messages = [
+            {"role": "system", "content": ANSWER_PROMPT},
+            {
+                "role": "user",
+                "content": (
+                    f"### Context Block\n\n{context_block}\n\n"
+                    f"---\n\n### Question\n\n{query}"
+                ),
+            },
+        ]
+
+        try:
+            answer_text = await self._llm_call_with_fallback(
+                models=ANSWER_MODELS,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=1024,
+            )
+        except Exception as e:
+            logger.error(f"answer_with_context LLM failed: {e}")
+            answer_text = (
+                "I encountered an error while generating the answer. "
+                "Please try again."
+            )
+
+        return {
+            "answer": answer_text,
+            "engine_used": "context-provided",
+            "chosen_brains": ["client-context"],
+            "sources": [],
+            "confidence": 0.85,
+            "chain_of_thought": [
+                {"step": "Context", "detail": "Using client-provided chunks", "status": "done"}
+            ],
+            "router_reasoning": "Context provided by client (IndexedDB mode).",
+        }

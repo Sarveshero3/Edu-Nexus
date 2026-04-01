@@ -34,10 +34,12 @@ export function applyTheme(theme: Theme, accentColor: AccentColor) {
   // Set the data-theme attribute for CSS token switching
   root.setAttribute('data-theme', resolved)
 
-  // Apply accent color CSS vars
+  // Apply accent color CSS vars — set both canonical and legacy names
   const accent = accentMap[accentColor]
   root.style.setProperty('--accent-cyan', accent.primary)
+  root.style.setProperty('--accent-primary', accent.primary)
   root.style.setProperty('--shadow-glow-cyan', `0 0 24px ${accent.glow}`)
+  root.style.setProperty('--shadow-glow-primary', `0 0 24px ${accent.glow}`)
 }
 
 export const useTheme = create<ThemeState>()(

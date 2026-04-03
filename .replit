@@ -57,7 +57,7 @@ externalPort = 8000
 [deployment]
 deploymentTarget = "vm"
 run = ["bash", "start.sh"]
-build = ["bash", "-c", "npm install --legacy-peer-deps && npm run build"]
+build = ["bash", "build.sh"]
 
 [userenv]
 

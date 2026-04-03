@@ -21,7 +21,7 @@ from src.graph_engine.neo4j_ops import upsert_graph
 logger = logging.getLogger("Pipeline")
 
 
-def _extract_text_with_fallback(file_path: Path) -> list[str]:
+def _extract_text_with_fallback(file_path: Path) -> tuple[list[str], bool]:
     """
     Extract text using a priority chain:
       1. Docling (primary — best quality for PDFs/PPTX/scanned docs)
@@ -30,6 +30,9 @@ def _extract_text_with_fallback(file_path: Path) -> list[str]:
 
     Docling is tried first when DOCLING_ENABLED=true (default).
     If Docling fails or returns empty text, falls back silently.
+
+    Returns (pages, used_docling) where used_docling indicates Docling
+    produced the text (so downstream cleaning can skip header removal).
     """
     # ── Priority 1: Docling ──────────────────────────────────────
     if DOCLING_ENABLED:
@@ -39,8 +42,7 @@ def _extract_text_with_fallback(file_path: Path) -> list[str]:
                 text = extract_with_docling(file_path)
                 if text and text.strip():
                     logger.info(f"Docling extracted {len(text)} chars from {file_path.name}")
-                    # Docling returns one markdown string; wrap as single "page"
-                    return [text]
+                    return [text], True
                 logger.warning(f"Docling returned empty text for {file_path.name}, falling back")
             else:
                 logger.info("Docling not installed, falling back to default extractor")
@@ -51,10 +53,10 @@ def _extract_text_with_fallback(file_path: Path) -> list[str]:
     pages = extract_text(file_path)
     if pages and any(p.strip() for p in pages):
         logger.info(f"Default extractor produced {len(pages)} pages from {file_path.name}")
-        return pages
+        return pages, False
 
-    # ── Priority 3: OCR fallback (images/scanned PDFs only) ────────
-    ocr_extensions = {".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".gif"}
+    # ── Priority 3: OCR fallback (images + scanned PDFs) ────────
+    ocr_extensions = {".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".gif", ".pdf"}
     if file_path.suffix.lower() in ocr_extensions:
         logger.warning(f"Default extractor produced no text for {file_path.name}, trying OCR")
         try:
@@ -63,12 +65,11 @@ def _extract_text_with_fallback(file_path: Path) -> list[str]:
             ocr_text = ocr.image_to_text(str(file_path))
             if ocr_text and ocr_text.strip():
                 logger.info(f"OCR extracted {len(ocr_text)} chars from {file_path.name}")
-                return [ocr_text]
+                return [ocr_text], False
         except Exception as e:
             logger.warning(f"OCR fallback failed for {file_path.name}: {e}")
 
-    # Nothing worked — return whatever we got (may be empty)
-    return pages or []
+    return pages or [], False
 
 
 def run_pipeline(
@@ -88,7 +89,7 @@ def run_pipeline(
 
     # ── Extract text ──────────────────────────────────────────────
     progress("extracting text", 5)
-    pages = _extract_text_with_fallback(file_path)
+    pages, used_docling = _extract_text_with_fallback(file_path)
     if not pages:
         raise ValueError(f"No text extracted from {file_path.name}")
 
@@ -99,7 +100,10 @@ def run_pipeline(
     cleaner = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cleaner)
 
-    cleaned_text = cleaner.clean_pages(pages, source_type="pdf")
+    if used_docling:
+        cleaned_text = "\n".join(pages).strip()
+    else:
+        cleaned_text = cleaner.clean_pages(pages, source_type="pdf")
     basename = file_path.stem
 
     # ── Chunk ─────────────────────────────────────────────────────

@@ -48,3 +48,7 @@ python-multipart>=0.0.6
 slowapi>=0.1.9                # Rate limiting for FastAPI
 # --- Document Intelligence (Docling — primary extractor) ---
 docling                       # High-quality PDF/PPTX extraction (~1.5GB models)
+docling
+pydantic
+slowapi
+starlette

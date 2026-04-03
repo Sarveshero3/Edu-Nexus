@@ -16,6 +16,14 @@ AI reasoning is powered by Groq-hosted LLMs.
 - Runs on: `localhost:8000`
 - Modules in `src/`: auth, orchestrator, vector_engine, graph_engine, retrieval, ingest, pipeline, splitter
 
+### Document Ingestion Pipeline
+Priority chain for text extraction:
+1. **Docling** (primary) — high-quality extraction for PDFs, PPTX, scanned docs. Produces clean markdown, skips header/footer cleaner. Controlled by `DOCLING_ENABLED=true` in config.
+2. **Default extractors** (fallback) — pdfplumber, python-docx, etc. Output runs through cleaner (header/footer removal, normalization).
+3. **OCR** (last resort) — pytesseract for images/scanned documents.
+
+Key files: `src/pipeline/run_pipeline.py`, `src/ingest/docling_extractor.py`, `src/ingest/cleaner.py`, `src/ingest/extractor.py`
+
 ### Frontend (React 18 + Vite + TypeScript)
 - Located in: `frontend/`
 - Runs on: `0.0.0.0:5000`

@@ -34,10 +34,12 @@ def _split_for_gliner(text: str, max_tokens: int = 350) -> list[str]:
     """Split long text into overlapping windows for GLiNER processing.
     Prevents silent truncation when chunks exceed GLiNER's 384-token context."""
     words = text.split()
+    if not words:
+        return []
     if len(words) <= max_tokens:
         return [text]
     chunks = []
-    step = max_tokens - 50  # 50-word overlap
+    step = max(1, max_tokens - 50)  # 50-word overlap, step always >= 1
     for i in range(0, len(words), step):
         chunks.append(' '.join(words[i:i + max_tokens]))
     return chunks
@@ -206,7 +208,8 @@ def build_graph_data(
     # Normalize edge weights to [0, 1]
     if edge_map:
         max_w = max(e["weight"] for e in edge_map.values())
-        for e in edge_map.values():
-            e["weight"] = round(e["weight"] / max_w, 4)
+        if max_w > 0:
+            for e in edge_map.values():
+                e["weight"] = round(e["weight"] / max_w, 4)
 
     return list(node_map.values()), list(edge_map.values())

@@ -46,6 +46,12 @@ def _point_id(workspace_id: str, doc_id: str, chunk_index: int) -> int:
 
 
 def add_chunks(workspace_id: str, doc_id: str, chunks: list[str], embeddings: list[list[float]]) -> None:
+    if not chunks or not embeddings:
+        return
+    if len(chunks) != len(embeddings):
+        raise ValueError(
+            f"Chunk/embedding count mismatch: {len(chunks)} chunks vs {len(embeddings)} embeddings"
+        )
     c = get_client()
     points = [
         PointStruct(

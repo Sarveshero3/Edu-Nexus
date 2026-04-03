@@ -71,6 +71,9 @@ def search(workspace_id: str, query: str, top_k: int = 10) -> List[dict]:
         if word not in STOPWORDS
     ]
 
+    if not tokenized_query:
+        return []
+
     scores = bm25.get_scores(tokenized_query)
     ranked = sorted(
         range(len(scores)),

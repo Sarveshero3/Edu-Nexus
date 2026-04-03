@@ -3,14 +3,14 @@
  * Uses the <spline-viewer> web component loaded in index.html.
  * Renders behind page content via position: fixed + z-index: 0.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, memo } from 'react'
 
 interface SplineSceneProps {
   onLoad?: () => void
   brightness?: number
 }
 
-export default function SplineScene({ onLoad, brightness = 1.6 }: SplineSceneProps) {
+function SplineSceneInner({ onLoad, brightness = 1.6 }: SplineSceneProps) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -62,3 +62,6 @@ export default function SplineScene({ onLoad, brightness = 1.6 }: SplineScenePro
     </div>
   )
 }
+
+const SplineScene = memo(SplineSceneInner)
+export default SplineScene

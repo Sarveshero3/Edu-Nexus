@@ -23,6 +23,14 @@ AI reasoning is powered by Groq-hosted LLMs.
 - State management: Zustand
 - Data fetching: TanStack Query + Axios
 
+### Frontend Performance Optimizations
+- **Route-level lazy loading**: All pages use `React.lazy()` + `Suspense` so only the code for the current route is loaded
+- **Heavy component lazy loading**: SplineScene (3D background) is lazily loaded in PublicLayout
+- **React.memo**: Applied to expensive components — SplineScene, NeuralNetwork3D, NeuralCanvas, MarkdownMessage — to prevent unnecessary re-renders
+- **Vite chunk splitting**: Vendor libraries split into separate chunks (`vendor-react`, `vendor-motion`, `vendor-query`, `vendor-state`, `vendor-three`) for better caching
+- **Build target**: `esnext` with esbuild minification + CSS minification
+- **Initial bundle**: ~50KB (everything else loads on demand per route)
+
 ## Required Secrets
 - `GROQ_API_KEY` — Required for AI query routing and answer generation (get one free at https://console.groq.com/)
 

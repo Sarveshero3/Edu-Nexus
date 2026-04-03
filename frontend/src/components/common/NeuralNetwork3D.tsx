@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, memo } from 'react'
 import { Canvas, useFrame, useThree, extend } from '@react-three/fiber'
 import { Float } from '@react-three/drei'
 import * as THREE from 'three'
@@ -253,7 +253,7 @@ function NeuralScene() {
 }
 
 // ─── Exported wrapper ───
-export default function NeuralNetwork3D({ className = '' }: { className?: string }) {
+function NeuralNetwork3DInner({ className = '' }: { className?: string }) {
   return (
     <div className={`w-full h-full ${className}`} style={{ minHeight: '280px' }}>
       <Canvas
@@ -267,3 +267,6 @@ export default function NeuralNetwork3D({ className = '' }: { className?: string
     </div>
   )
 }
+
+const NeuralNetwork3D = memo(NeuralNetwork3DInner)
+export default NeuralNetwork3D

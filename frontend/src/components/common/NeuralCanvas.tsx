@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, memo } from 'react'
 
 /* ═══════════════════════════════════════════════════════
    Canvas Neural Network — High-fidelity GPU-like viz
@@ -54,7 +54,7 @@ const LAYER_COUNTS = [6, 5, 8, 7, 5, 3]
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t }
 function rgb(c: number[], a: number) { return `rgba(${c[0]},${c[1]},${c[2]},${a})` }
 
-export default function NeuralCanvas({ className = '' }: { className?: string }) {
+function NeuralCanvasInner({ className = '' }: { className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<number>(0)
   const nodesRef = useRef<Node[]>([])
@@ -369,3 +369,6 @@ export default function NeuralCanvas({ className = '' }: { className?: string })
       style={{ display: 'block' }} />
   )
 }
+
+const NeuralCanvas = memo(NeuralCanvasInner)
+export default NeuralCanvas

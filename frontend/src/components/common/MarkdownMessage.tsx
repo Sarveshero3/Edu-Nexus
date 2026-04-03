@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -11,7 +12,7 @@ interface MarkdownMessageProps {
  * Renders headings, tables, lists, bold, code blocks, etc.
  * with proper styling for the dark theme.
  */
-export default function MarkdownMessage({ content, className = '' }: MarkdownMessageProps) {
+function MarkdownMessageInner({ content, className = '' }: MarkdownMessageProps) {
   return (
     <div className={`markdown-prose ${className}`}>
       <ReactMarkdown
@@ -129,3 +130,6 @@ export default function MarkdownMessage({ content, className = '' }: MarkdownMes
     </div>
   )
 }
+
+const MarkdownMessage = memo(MarkdownMessageInner)
+export default MarkdownMessage

@@ -1,0 +1,92 @@
+2026-04-03 23:10:17.89
+fee2af8c
+System
+starting up user application
+2026-04-03 23:10:17.89
+fee2af8c
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-03 23:10:17.90
+fee2af8c
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-03 23:11:17.90
+fee2af8c
+System
+a port configuration was specified but the required port was never opened
+2026-04-03 23:11:27.91
+fee2af8c
+System
+starting up user application
+2026-04-03 23:11:27.91
+fee2af8c
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-03 23:11:27.91
+fee2af8c
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-03 23:12:28.05
+fee2af8c
+System
+a port configuration was specified but the required port was never opened
+2026-04-03 23:12:42.09
+fee2af8c
+System
+starting up user application
+2026-04-03 23:12:42.09
+fee2af8c
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-03 23:12:42.09
+fee2af8c
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-03 23:13:42.11
+fee2af8c
+System
+a port configuration was specified but the required port was never opened
+2026-04-03 23:13:55.46
+fee2af8c
+System
+starting up user application
+2026-04-03 23:13:55.47
+fee2af8c
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-03 23:13:55.47
+fee2af8c
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-03 23:14:55.64
+fee2af8c
+System
+a port configuration was specified but the required port was never opened
+2026-04-03 23:15:02.93
+fee2af8c
+System
+starting up user application
+2026-04-03 23:15:02.94
+fee2af8c
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-03 23:15:02.94
+fee2af8c
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)
+2026-04-03 23:16:02.93
+fee2af8c
+System
+a port configuration was specified but the required port was never opened
+2026-04-03 23:16:13.70
+fee2af8c
+System
+starting up user application
+2026-04-03 23:16:13.70
+fee2af8c
+System
+metasidecar: loaded enterprise status from environment is_enterprise=false
+2026-04-03 23:16:13.70
+fee2af8c
+System
+forwarding local port 5000 to external port 80 (mapped as 1104)

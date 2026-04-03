@@ -30,7 +30,6 @@ from groq import Groq
 
 from src.retrieval import bm25_index
 from src.graph_engine import neo4j_ops
-from src.graph_engine.extractor import build_graph_data
 from src.vector_engine import store
 from src.vector_engine import vector as vec
 

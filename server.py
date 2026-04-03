@@ -47,7 +47,6 @@ from src.orchestrator.manager import OrchestratorManager
 from src.vector_engine import store
 from src.graph_engine import neo4j_ops
 from src.retrieval import bm25_index
-from src.pipeline.run_pipeline import run_pipeline
 
 # ── Logging ────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -417,23 +416,21 @@ async def upload_sources(
     job_id = _make_job([p.name for p in saved_paths])
 
     async def run_all():
+        from src.pipeline.run_pipeline import run_pipeline as _run_pipeline
         total_files = len(saved_paths)
         for idx, path in enumerate(saved_paths):
             fname = path.name
             try:
-                # Update per-file status
                 _update_file_status(job_id, fname, status="processing", stage="starting")
 
                 def file_progress(stage, pct):
                     _update_file_status(job_id, fname, stage=stage)
-                    # Overall progress: combine file index and per-file pct
                     overall = int(((idx * 100) + pct) / total_files)
                     _update_job(job_id, f"{fname}: {stage}", min(overall, 99))
 
-                # Acquire semaphore to limit concurrent pipeline runs
                 async with _INGESTION_SEMAPHORE:
                     result = await asyncio.to_thread(
-                        run_pipeline, path, workspace_id, file_progress
+                        _run_pipeline, path, workspace_id, file_progress
                     )
                 chunks = result.get("chunks", 0)
                 warning = result.get("warning")
@@ -1178,5 +1175,4 @@ if _frontend_dist.is_dir():
 if __name__ == "__main__":
     import os
     is_production = os.getenv("REPLIT_DEPLOYMENT") == "1"
-    run_port = 5000 if is_production else PORT
-    uvicorn.run("server:app", host="0.0.0.0", port=run_port, reload=not is_production)
+    uvicorn.run("server:app", host="0.0.0.0", port=PORT, reload=not is_production)

@@ -86,4 +86,4 @@ sessions/
 .sessions/
 *.session
 *.session-journal
-session.db
+session.dbattached_assets/

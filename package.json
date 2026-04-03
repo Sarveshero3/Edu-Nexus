@@ -1,1 +1,7 @@
-{}
+{
+  "name": "edu-nexus",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm install --legacy-peer-deps && npm run build"
+  }
+}

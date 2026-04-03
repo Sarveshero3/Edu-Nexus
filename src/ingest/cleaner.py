@@ -36,13 +36,20 @@ def is_page_number_line(line: str) -> bool:
 
 
 def is_short_allcaps_header(line: str) -> bool:
+    words = line.split()
+    if len(words) > 8:
+        return False
     letters = re.sub(r"[^A-Za-z]", "", line)
-    return letters and sum(c.isupper() for c in letters) / len(letters) > 0.7
+    if not letters:
+        return False
+    return sum(c.isupper() for c in letters) / len(letters) > 0.7
 
 
 def remove_headers_and_footers_from_page(page: str, repeated_lines: set) -> str:
+    lines = page.splitlines()
+    non_empty = [l for l in lines if re.sub(r"\s+", " ", l).strip()]
     out = []
-    for line in page.splitlines():
+    for idx, line in enumerate(lines):
         norm = re.sub(r"\s+", " ", line).strip()
         if not norm:
             continue
@@ -50,7 +57,8 @@ def remove_headers_and_footers_from_page(page: str, repeated_lines: set) -> str:
             continue
         if is_page_number_line(norm):
             continue
-        if is_short_allcaps_header(norm):
+        is_edge = idx < 2 or idx >= len(lines) - 2
+        if len(non_empty) > 3 and is_edge and is_short_allcaps_header(norm):
             continue
         out.append(line)
     return "\n".join(out)

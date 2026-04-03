@@ -43,8 +43,13 @@ def build_index(workspace_id: str, chunks: List[str]) -> None:
     if not chunks:
         return
 
-    tokenized_corpus = [chunk.lower().split() for chunk in chunks]
+    non_empty = [c for c in chunks if c.strip()]
+    if not non_empty:
+        return
+
+    tokenized_corpus = [chunk.lower().split() for chunk in non_empty]
     bm25 = BM25Okapi(tokenized_corpus)
+    chunks = non_empty
 
     path = _index_path(workspace_id)
     with open(path, "wb") as f:

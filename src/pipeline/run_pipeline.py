@@ -107,7 +107,7 @@ def run_pipeline(
     chunks = cleaner.chunk_text_by_sentences(
         cleaned_text, max_tokens=500, overlap=100
     )
-    chunk_texts = [text for (_, _, text) in chunks]
+    chunk_texts = [text for (_, _, text) in chunks if text.strip()]
 
     if not chunk_texts:
         logger.warning(f"No chunks produced from {file_path.name} — skipping embedding/indexing")

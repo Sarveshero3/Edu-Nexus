@@ -1161,4 +1161,6 @@ async def query_with_context(request: Request, body: dict = Body(...)):
 # ====================================================================== #
 
 if __name__ == "__main__":
-    uvicorn.run("server:app", host="0.0.0.0", port=PORT, reload=True)
+    import os
+    is_dev = os.getenv("REPL_ID") is not None and os.getenv("REPLIT_DEPLOYMENT") is None
+    uvicorn.run("server:app", host="0.0.0.0", port=PORT, reload=is_dev)

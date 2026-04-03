@@ -26,6 +26,7 @@ from fastapi import (
     Body,
 )
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -1157,10 +1158,25 @@ async def query_with_context(request: Request, body: dict = Body(...)):
 
 
 # ====================================================================== #
+#  STATIC FILE SERVING (production)                                        #
+# ====================================================================== #
+
+_frontend_dist = Path(__file__).parent / "frontend" / "dist"
+if _frontend_dist.is_dir():
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = _frontend_dist / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(_frontend_dist / "index.html")
+
+
+# ====================================================================== #
 #  ENTRYPOINT                                                              #
 # ====================================================================== #
 
 if __name__ == "__main__":
     import os
-    is_dev = os.getenv("REPL_ID") is not None and os.getenv("REPLIT_DEPLOYMENT") is None
-    uvicorn.run("server:app", host="0.0.0.0", port=PORT, reload=is_dev)
+    is_production = os.getenv("REPLIT_DEPLOYMENT") == "1"
+    run_port = 5000 if is_production else PORT
+    uvicorn.run("server:app", host="0.0.0.0", port=run_port, reload=not is_production)
